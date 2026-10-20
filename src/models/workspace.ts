@@ -2,9 +2,10 @@ import type { AppState, Folder, Conversation, ColorRule } from "./types";
 import { parseConversationUrl, isProjectId } from "../utils/url";
 import { validColor, colorName } from "./state";
 import { object, keys, text } from "./theme";
+import { folderPinned } from './folders';
 export type Workspace = {
   version: 1;
-  folders: Pick<Folder, "id" | "name" | "parentId" | "favorite">[];
+  folders: Pick<Folder, "id" | "name" | "parentId" | "pinned" | "color">[];
   chats: {
     id: string;
     url: string;
@@ -21,11 +22,12 @@ export type Workspace = {
 export function exportWorkspace(s: AppState): Workspace {
   return {
     version: 1,
-    folders: s.folders.map(({ id, name, parentId, favorite }) => ({
-      id,
-      name,
-      parentId,
-      favorite,
+    folders: s.folders.map(f => ({
+      id: f.id,
+      name: f.name,
+      parentId: f.parentId,
+      pinned: folderPinned(f),
+      ...(f.color ? { color: f.color } : {}),
     })),
     chats: s.conversations.map((c) => ({
       id: c.id,
@@ -81,10 +83,12 @@ export function parseWorkspace(raw: unknown): Workspace {
   const parents = new Map<string, string | null>();
   for (const raw of r.folders) {
     const f = object(raw);
-    keys(f, ["id", "name", "parentId", "favorite"]);
+    keys(f, ["id", "name", "parentId", "pinned", "favorite", "color"]);
     text(f.name, false, 300);
     if (
-      typeof f.favorite !== "boolean" ||
+      (f.pinned !== undefined && typeof f.pinned !== "boolean") ||
+      (f.favorite !== undefined && typeof f.favorite !== "boolean") ||
+      (f.color !== undefined && (!validColor(f.color) || f.color !== f.color.toLowerCase())) ||
       (f.parentId !== null &&
         (typeof f.parentId !== "string" || !folderIds.has(f.parentId)))
     )
@@ -130,14 +134,20 @@ export function parseWorkspace(raw: unknown): Workspace {
     )
       throw Error("Invalid chat reference.");
   }
-  return r as unknown as Workspace;
+  return { ...r, folders: r.folders.map(raw => {
+    const { favorite: _legacy, ...f } = object(raw);
+    void _legacy;
+    return { ...f, pinned: folderPinned(object(raw)) };
+  }) } as unknown as Workspace;
 }
 export function applyWorkspace(s: AppState, w: Workspace): AppState {
   const folders = new Map(s.folders.map((f) => [f.id, f]));
   for (const f of w.folders)
     folders.set(f.id, {
       ...folders.get(f.id),
-      ...f,
+      id: f.id, name: f.name, parentId: f.parentId,
+      pinned: folderPinned(f),
+      ...(f.color ? { color: f.color } : {}),
       createdAt: folders.get(f.id)?.createdAt ?? Date.now(),
     });
   const chats = new Map(s.conversations.map((c) => [c.id, c]));
@@ -181,7 +191,8 @@ export function workspaceDiff(s: AppState, w: Workspace) {
           old.id === f.id &&
           (old.name !== f.name ||
             old.parentId !== f.parentId ||
-            old.favorite !== f.favorite),
+            folderPinned(old) !== folderPinned(f) ||
+            (f.color !== undefined && old.color !== f.color)),
       ),
     ).length,
     chatsAdded: next.conversations.length - s.conversations.length,

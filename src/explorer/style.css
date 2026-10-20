@@ -1,5 +1,9 @@
 @charset "UTF-8";
 :root {
+  --folder-default-color: #eab308;
+  --favorite-color: #a66b00;
+  --ui-scale: 1;
+  zoom: var(--ui-scale);
   font-family:
     "Segoe UI",
     system-ui,
@@ -14,6 +18,7 @@
   --line: #e4e6e9;
   --muted: #717780;
   --hover: #edf0f3;
+  --row-hover: #f3f3f3;
   --active: #e4eef9;
   --accent: #176bc2;
   --danger: #bd2929;
@@ -32,6 +37,10 @@ select {
   color: inherit;
 }
 button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
   border: 1px solid transparent;
   background: transparent;
   border-radius: 4px;
@@ -65,10 +74,10 @@ input::placeholder {
   color: var(--muted);
 }
 .app {
-  height: 100dvh;
+  height: calc(100dvh / var(--ui-scale));
   display: flex;
   flex-direction: column;
-  min-width: 400px;
+  min-width: min(400px, calc(100vw / var(--ui-scale)));
   overflow: hidden;
 }
 .toolbar {
@@ -107,7 +116,7 @@ input::placeholder {
 .breadcrumb button {
   padding: 5px;
 }
-.toolbar > input {
+.toolbar .search-field {
   width: 180px;
 }
 .commandbar {
@@ -161,7 +170,7 @@ aside {
   color: var(--accent);
 }
 .count {
-  float: right;
+  margin-left: auto;
   color: var(--muted);
   font-size: 11px;
 }
@@ -182,16 +191,25 @@ aside {
   display: flex;
   align-items: center;
   min-height: 31px;
-  width: max-content;
-  min-width: 100%;
+  width: 100%;
+  min-width: 0;
   padding-right: 8px;
+}
+.tree-row:not(.active):hover {
+  background: var(--row-hover);
+}
+.tree-name:hover, .chevron:hover {
+  background: transparent;
 }
 .chevron {
   width: 22px;
-  padding: 3px;
+  padding: 2px;
   font-size: 15px;
 }
 .tree-name {
+  flex: 1;
+  min-width: 0;
+  justify-content: flex-start;
   text-align: left;
   padding: 5px 4px;
   font-size: 12px;
@@ -200,12 +218,12 @@ aside {
   text-overflow: ellipsis;
 }
 .folder-icon {
-  color: #bf8b22;
-  font-size: 21px;
-  line-height: 1;
+  display: inline-flex;
+  flex-shrink: 0;
 }
 
 main {
+  position: relative;
   flex: 1;
   overflow: auto;
   min-width: 0;
@@ -229,12 +247,12 @@ h1 {
 }
 .file-list {
   padding: 0 14px 28px;
-  min-width: 320px;
+  min-width: min(320px, 100%);
 }
 .table-heading,
 .item-row {
   display: grid;
-  grid-template-columns: minmax(120px, 1fr) 55px 100px 30px;
+  grid-template-columns: minmax(120px, 1fr) 55px 100px 60px;
   align-items: center;
   gap: 8px;
   padding: 0 8px;
@@ -254,7 +272,7 @@ h1 {
   cursor: default;
 }
 .item-row:hover {
-  background: var(--hover);
+  background: var(--row-hover);
 }
 .item-row.selected {
   background: var(--active);
@@ -267,6 +285,7 @@ h1 {
   min-width: 0;
 }
 .truncate {
+  min-width: 0;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -341,6 +360,8 @@ h1 {
   padding: 2px 6px;
 }
 .context-menu {
+  max-height: calc(100dvh / var(--ui-scale) - 16px);
+  overflow-y: auto;
   position: fixed;
   z-index: 20;
   width: 230px;
@@ -379,8 +400,8 @@ dialog {
   color: inherit;
   border: 1px solid var(--line);
   border-radius: 8px;
-  width: min(460px, calc(100vw - 32px));
-  max-height: calc(100dvh - 32px);
+  width: min(460px, calc(100vw / var(--ui-scale) - 32px));
+  max-height: calc(100dvh / var(--ui-scale) - 32px);
   padding: 0;
   box-shadow: var(--shadow);
 }
@@ -532,9 +553,11 @@ dialog p {
     --line: #393b40;
     --muted: #a0a6b0;
     --hover: #303237;
+    --row-hover: #292a2b;
     --active: #283e55;
     --accent: #7ab5f4;
     --danger: #ff9696;
+    --favorite-color: #f5c451;
     --shadow: 0 12px 42px #0006;
   }
   .primary {
@@ -543,20 +566,17 @@ dialog p {
   .danger-button {
     color: #381a1a;
   }
-  .folder-icon {
-    color: #e1b85e;
-  }
 }
 @media (max-width: 700px) {
   aside {
     width: 155px;
   }
-  .toolbar > input {
+  .toolbar .search-field {
     width: 110px;
   }
   .table-heading,
   .item-row {
-    grid-template-columns: minmax(100px, 1fr) 40px 24px;
+    grid-template-columns: minmax(100px, 1fr) 40px 60px;
   }
   .date-cell {
     display: none;
@@ -580,7 +600,7 @@ dialog p {
   }
   .file-list {
     padding-inline: 8px;
-    min-width: 240px;
+    min-width: min(240px, 100%);
   }
 }
 @media (max-width: 500px) {
@@ -588,7 +608,7 @@ dialog p {
     width: 125px;
     min-width: 125px;
   }
-  .toolbar > input {
+  .toolbar .search-field {
     width: 85px;
   }
   .toolbar {
@@ -646,7 +666,7 @@ dialog p {
   bottom: 16px;
   left: 50%;
   transform: translateX(-50%);
-  max-width: calc(100% - 32px);
+  max-width: calc(100vw / var(--ui-scale) - 32px);
   z-index: 15;
   border: 1px solid var(--line);
   border-radius: 4px;
@@ -673,6 +693,8 @@ dialog p {
   flex-shrink: 0;
 }
 .overflow summary {
+  display: flex;
+  align-items: center;
   list-style: none;
   cursor: pointer;
   padding: 5px 9px;
@@ -698,7 +720,8 @@ dialog p {
   min-width: 180px;
 }
 .overflow-menu button {
-  display: block;
+  display: flex;
+  justify-content: flex-start;
   text-align: left;
   width: 100%;
 }
@@ -749,7 +772,7 @@ dialog {
 .palette-list {
   display: flex;
   flex-direction: column;
-  max-height: 55vh;
+  max-height: calc(55dvh / var(--ui-scale));
   overflow: auto;
   margin-top: 8px;
 }
@@ -769,3 +792,112 @@ dialog {
   max-width: 160px;
   min-width: 70px;
 }
+
+/* Shared internal icon geometry; all color comes from the surrounding theme. */
+.ui-icon {
+  flex-shrink: 0;
+  vertical-align: -3px;
+}
+.icon-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.context-menu .icon-label {
+  flex: 1;
+}
+.side-link {
+  justify-content: flex-start;
+}
+p > .ui-icon,
+h3 > .ui-icon {
+  margin-inline-end: 6px;
+}
+.search-field {
+  display: block;
+  position: relative;
+  min-width: 0;
+  margin: 0;
+}
+.search-field > .ui-icon {
+  position: absolute;
+  left: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  pointer-events: none;
+}
+.search-field > input {
+  width: 100%;
+  padding-inline-start: 30px;
+}
+
+.colored-folder-icon {
+  /* A theme border keeps light user colors visible on either theme. */
+  stroke: var(--muted);
+  stroke-width: 0.75;
+}
+.scale-actions { align-items: center; }
+.scale-actions button { min-width: 32px; }
+.scale-actions output { min-width: 44px; text-align: center; }
+.data-settings { padding-block: 16px; }
+.data-settings > h3:first-child { margin-top: 0; }
+.data-settings > h3 { margin-block: 24px 16px; }
+
+/* Decorative colors never change the row/name selection colors. */
+.row-actions { display: flex; justify-content: flex-end; align-items: center; gap: 2px; }
+.favorite-button { flex-shrink: 0; padding: 4px; color: var(--muted); opacity: 0; pointer-events: none; }
+.favorite-button.is-favorite { color: var(--favorite-color); opacity: 1; pointer-events: auto; }
+.tree-row:hover .favorite-button, .tree-row:focus-within .favorite-button,
+.item-row:hover .favorite-button, .item-row:focus-within .favorite-button,
+.favorite-button:focus-visible { opacity: 1; pointer-events: auto; }
+.folder-color-reset { margin-right: auto; }
+@media (hover: none) { .favorite-button { opacity: 1; pointer-events: auto; } }
+
+.name-tooltip {
+  position: fixed;
+  z-index: 100;
+  max-width: min(280px, calc(100vw / var(--ui-scale) - 16px));
+  max-height: calc(100vh / var(--ui-scale) - 16px);
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  padding: 6px 8px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: var(--panel);
+  color: inherit;
+  box-shadow: var(--shadow);
+  font-size: 12px;
+  pointer-events: none;
+}
+
+.folder-pin-button { flex-shrink: 0; padding: 4px; color: inherit; opacity: 0; pointer-events: none; }
+.folder-pin-button.is-pinned,
+.tree-row:hover .folder-pin-button, .tree-row:focus-within .folder-pin-button,
+.item-row:hover .folder-pin-button, .item-row:focus-within .folder-pin-button,
+.folder-pin-button:focus-visible { opacity: 1; pointer-events: auto; }
+@media (hover: none) { .folder-pin-button { opacity: 1; pointer-events: auto; } }
+
+.drag-count {
+  position: fixed;
+  right: 12px;
+  bottom: 12px;
+  z-index: 100;
+  pointer-events: none;
+  padding: 6px 9px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: var(--panel);
+  font-size: 12px;
+}
+
+.marquee-active { user-select: none; }
+.selection-marquee {
+  position: absolute;
+  z-index: 2;
+  pointer-events: none;
+  border: 1px solid var(--accent);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
+
+.tree-name-editing { display: flex; align-items: center; gap: 6px; }
+.tree-name-editing .inline-rename { flex: 1; min-width: 0; width: 100%; }

@@ -18,7 +18,7 @@ const folder = (id: string, parentId: string | null = null): Folder => ({
   id,
   name: id,
   parentId,
-  favorite: false,
+  pinned: false,
   createdAt: 1,
 });
 function nested() {

@@ -1,6 +1,8 @@
 import type { ReactNode } from "react";
 import type { Conversation, Folder } from "../models/types";
 import { t } from "../i18n";
+import { FolderIcon } from './FolderIcon';
+import { TruncatedName } from './TruncatedName';
 
 export function ItemDetails({
   folder,
@@ -18,18 +20,11 @@ export function ItemDetails({
       <span role="cell" className="item-name">
         {folder && (
           <span className="folder-icon" aria-hidden="true">
-            ▰
+            <FolderIcon color={folder.color} />
           </span>
         )}
         {nameEditor ?? (
-          <span className="truncate">
-            {folder?.name ?? conversation?.title}
-          </span>
-        )}
-        {(folder?.favorite || conversation?.favorite) && (
-          <span title={t("favorite")} aria-label={t("favorite")}>
-            ★
-          </span>
+          <TruncatedName>{folder?.name ?? conversation?.title ?? ''}</TruncatedName>
         )}
         {conversation?.projectId && (
           <small

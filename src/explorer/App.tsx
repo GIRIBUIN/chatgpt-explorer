@@ -1,4 +1,13 @@
 import { SyncSettings } from "../components/SyncSettings";
+import { UiIcon } from '../components/UiIcon';
+import { FolderIcon } from '../components/FolderIcon';
+import { TruncatedName } from '../components/TruncatedName';
+import { FavoriteButton } from '../components/FavoriteButton';
+import { FolderPinButton } from '../components/FolderPinButton';
+import { sortFolders } from '../models/folders';
+import { dragPayload, canDropItems, moveDraggedItems } from '../models/drag';
+import { FolderColorFields } from '../components/FolderColorFields';
+import { uiScale, scaleStep, scaleShortcut, menuPosition } from '../models/ui-scale';
 import { extensionSyncStore } from "../sync/store";
 import { stateLock } from "../sync/locks";
 import type { Preview } from "../sync/client";
@@ -42,6 +51,7 @@ import type {
 } from "../models/types";
 import {
   addConversation,
+  assignColor,
   colorName,
   renameColor,
   ancestors,
@@ -58,6 +68,7 @@ import { navigate, travel, type History } from "../utils/navigation";
 import { loadState, saveState } from "../storage";
 import { request } from "./api";
 import { Dialog } from "../components/Dialog";
+import { useMarquee } from './use-marquee';
 
 type Editor =
   | { kind: "add"; title: string; url: string }
@@ -79,7 +90,7 @@ export function App() {
     ids: string[];
     anchor: string | null;
   }>({ ids: [], anchor: null });
-  const [renaming, setRenaming] = useState<Item | null>(null);
+  const [renaming, setRenaming] = useState<(Item & { surface?: 'main' | 'sidebar' }) | null>(null);
   const [palette, setPalette] = useState(false);
   const [syncEpoch, setSyncEpoch] = useState(0);
   const [autoPreview, setAutoPreview] = useState<Preview | null>(null);
@@ -99,10 +110,10 @@ export function App() {
     }),
     [search, setSearch] = useState(""),
     [editor, setEditor] = useState<Editor | null>(null),
-    [menu, setMenu] = useState<{ item: Item; x: number; y: number } | null>(
+    [menu, setMenu] = useState<{ item: Item; x: number; y: number; surface?: 'main' | 'sidebar' } | null>(
       null,
     ),
-    [drag, setDrag] = useState<Item | null>(null),
+    [drag, setDrag] = useState<Item[] | null>(null),
     [over, setOver] = useState<string | null>(null);
   useEffect(() => {
     void loadState()
@@ -225,6 +236,21 @@ export function App() {
       for (const key of Object.keys(variables)) root.style.removeProperty(key);
     };
   }, [state.theme]);
+  useEffect(() => {
+    document.documentElement.style.setProperty('--ui-scale', String(uiScale(state.settings.uiScale) / 100));
+    return () => { document.documentElement.style.removeProperty('--ui-scale'); };
+  }, [state.settings.uiScale]);
+  useEffect(() => {
+    if (!ready) return;
+    const onScaleKey = (event: globalThis.KeyboardEvent) => {
+      const direction = scaleShortcut(event);
+      if (direction === null) return;
+      event.preventDefault(); // Also in dialogs/text inputs; never invokes browser page zoom.
+      if (!readOnly) void commit(s => ({ ...s, settings: { ...s.settings, uiScale: scaleStep(s.settings.uiScale, direction) } }));
+    };
+    document.addEventListener('keydown', onScaleKey, true);
+    return () => document.removeEventListener('keydown', onScaleKey, true);
+  }, [ready, readOnly]);
   function settings(patch: Partial<Settings>) {
     void commit((s) => ({ ...s, settings: { ...s.settings, ...patch } }));
   }
@@ -271,22 +297,13 @@ export function App() {
       setNotice(t("browserFailed"));
     }
   }
+  function pinFolder(id: string) {
+    void commit(s => ({ ...s, folders: s.folders.map(f => f.id === id ? { ...f, pinned: !f.pinned } : f) }));
+    setMenu(null);
+  }
   function favorite(item: Item) {
-    void commit((s) =>
-      item.kind === "folder"
-        ? {
-            ...s,
-            folders: s.folders.map((f) =>
-              f.id === item.id ? { ...f, favorite: !f.favorite } : f,
-            ),
-          }
-        : {
-            ...s,
-            conversations: s.conversations.map((c) =>
-              c.id === item.id ? { ...c, favorite: !c.favorite } : c,
-            ),
-          },
-    );
+    if (item.kind !== 'conversation') return;
+    void commit(s => ({ ...s, conversations: s.conversations.map(c => c.id === item.id ? { ...c, favorite: !c.favorite } : c) }));
     setMenu(null);
   }
   async function addCandidate(candidate: ChatCandidate) {
@@ -435,34 +452,49 @@ export function App() {
   function showEditor(
     kind: "rename" | "move" | "color" | "delete",
     item: Item,
+    surface: 'main' | 'sidebar' = 'main',
   ) {
     setMenu(null);
     if (kind === "rename") {
       setSelected(item);
       if (
-        item.kind === "folder" &&
+        surface === 'main' && item.kind === "folder" &&
         !visibleItems.some((i) => itemKey(i) === itemKey(item))
       ) {
         const parent = state.folders.find((f) => f.id === item.id)?.parentId;
         settings({ colorFilter: "all", projectFilter: "all" });
         go(parent ? `folder:${parent}` : "home");
       }
-      setRenaming(item);
+      setRenaming({ ...item, surface });
       return;
     }
     const items = activeItems.some((i) => itemKey(i) === itemKey(item))
       ? activeItems
       : [item];
+    if (kind === 'color' && items.some(i => i.kind !== item.kind)) return;
     setEditor({
       kind,
       item,
-      items:
-        kind === "color"
-          ? items.filter((i) => i.kind === "conversation")
-          : items,
+      items: kind === "color" ? items.filter(i => i.kind === item.kind) : items,
+    });
+  }
+  function closeRename() {
+    const id = renaming?.surface === 'sidebar' ? renaming.id : null;
+    const focused = document.activeElement;
+    const restoreFocus = id && focused instanceof HTMLInputElement &&
+      focused.closest('[data-sidebar-folder-id]')?.getAttribute('data-sidebar-folder-id') === id;
+    setRenaming(null);
+    if (restoreFocus) requestAnimationFrame(() => {
+      const row = Array.from(document.querySelectorAll<HTMLElement>('[data-sidebar-folder-id]'))
+        .find(row => row.dataset.sidebarFolderId === id);
+      row?.querySelector<HTMLButtonElement>('.tree-name')?.focus({ preventScroll: true });
     });
   }
   function key(e: KeyboardEvent) {
+    if (e.key === 'Escape' && dragRef.current) {
+      endDrag();
+      return;
+    }
     if (editor || candidates || palette) return;
     if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === "p") {
       e.preventDefault();
@@ -475,12 +507,15 @@ export function App() {
       return;
     }
     if (isTextInput(e.target as HTMLElement)) return;
-    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "a") {
+    if (e.key === 'F2') {
       e.preventDefault();
-      setSelection({
-        ids: visibleItems.map(itemKey),
-        anchor: visibleItems[0] ? itemKey(visibleItems[0]) : null,
-      });
+      if (readOnly || renaming) return;
+      const target = e.target as HTMLElement;
+      const id = target.closest('[data-sidebar-folder-id]')?.getAttribute('data-sidebar-folder-id');
+      if (id && state.folders.some(f => f.id === id))
+        showEditor('rename', { kind: 'folder', id }, 'sidebar');
+      else if (!target.closest('aside') && activeItems.length === 1 && selected)
+        showEditor('rename', selected);
       return;
     }
     if (e.key === "Escape") {
@@ -497,92 +532,109 @@ export function App() {
     } else if (e.altKey && e.key === "ArrowUp") {
       e.preventDefault();
       up();
-    } else if (activeItems.length === 1 && selected && e.key === "F2") {
-      e.preventDefault();
-      showEditor("rename", selected);
     } else if (selected && e.key === "Delete") {
       e.preventDefault();
       showEditor("delete", selected);
     }
   }
-  function dropProps(target: string | null) {
-    const valid =
-      !!drag &&
-      (drag.kind === "conversation" ||
-        canMoveFolder(state.folders, drag.id, target));
+  const dragRef = useRef<Item[] | null>(null);
+  const dragClick = useRef(false);
+  function endDrag() {
+    dragRef.current = null;
+    setDrag(null);
+    setOver(null);
+    // Native drag normally suppresses click; also guard a trailing synthetic click.
+    setTimeout(() => { dragClick.current = false; }, 0);
+  }
+  function dropProps(target: string | null, zone = target ?? 'system') {
+    const valid = !readOnly && !!drag && canDropItems(state, drag, target);
     return {
       onDragOver: (e: DragEvent) => {
-        if (!drag) return;
+        const items = dragRef.current;
+        if (!items) return;
         e.preventDefault();
         e.stopPropagation();
-        e.dataTransfer.dropEffect = valid ? "move" : "none";
-        setOver(target ?? "root");
+        e.dataTransfer.dropEffect = !readOnly && canDropItems(current.current, items, target) ? 'move' : 'none';
+        setOver(zone);
       },
-      onDragLeave: () => setOver(null),
+      onDragLeave: (e: DragEvent) => {
+        if (!(e.relatedTarget instanceof Node) || !e.currentTarget.contains(e.relatedTarget)) setOver(null);
+      },
       onDrop: (e: DragEvent) => {
+        const items = dragRef.current;
+        if (!items) return;
         e.preventDefault();
         e.stopPropagation();
-        if (drag && valid) void commit((s) => moveItem(s, drag, target));
-        setDrag(null);
-        setOver(null);
+        if (!readOnly && canDropItems(current.current, items, target)) {
+          void commit(s => moveDraggedItems(s, items, target)).then(ok => {
+            if (ok) setSelected(null);
+          });
+        }
+        endDrag();
       },
-      "data-drop":
-        over === (target ?? "root") ? (valid ? "valid" : "invalid") : undefined,
+      'data-drop': drag && over === zone ? (valid ? 'valid' : 'invalid') : undefined,
     };
   }
   const dragProps = (item: Item) => ({
-    draggable: true,
+    draggable: !readOnly && !renaming,
+    onClickCapture: (e: React.MouseEvent) => {
+      if (dragClick.current) { e.preventDefault(); e.stopPropagation(); }
+    },
     onDragStart: (e: DragEvent) => {
-      setDrag(item);
-      e.dataTransfer.effectAllowed = "move";
-      e.dataTransfer.setData(
-        "application/x-chat-explorer",
-        JSON.stringify(item),
-      );
+      if (readOnly || renaming || isTextInput(e.target as HTMLElement)) { e.preventDefault(); return; }
+      const items = dragPayload(current.current, item, activeItems);
+      if (!items.length) { e.preventDefault(); return; }
+      if (!selection.ids.includes(itemKey(item))) setSelected(item);
+      dragClick.current = true;
+      dragRef.current = items;
+      setDrag(items);
+      e.stopPropagation();
+      e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.setData('application/x-chat-explorer', JSON.stringify(items));
     },
-    onDragEnd: () => {
-      setDrag(null);
-      setOver(null);
-    },
+    onDragEnd: endDrag,
   });
   function context(e: React.MouseEvent, item: Item) {
     e.preventDefault();
     if (!selection.ids.includes(itemKey(item))) setSelected(item);
     setMenu({
       item,
-      x: Math.max(8, Math.min(e.clientX, window.innerWidth - 240)),
-      y: Math.max(8, Math.min(e.clientY, window.innerHeight - 330)),
+      surface: e.currentTarget.closest('[data-sidebar-folder-id]') ? 'sidebar' : 'main',
+      ...menuPosition(e.clientX, e.clientY, window.innerWidth, window.innerHeight, state.settings.uiScale),
     });
   }
   function folderTree() {
     const rows: { folder: Folder; depth: number }[] = [];
-    const stack = state.folders
-      .filter((f) => f.parentId === null)
-      .sort((a, b) => b.name.localeCompare(a.name))
+    const stack = sortFolders(state.folders.filter(f => f.parentId === null), (a, b) => a.name.localeCompare(b.name))
+      .reverse()
       .map((folder) => ({ folder, depth: 0 }));
     while (stack.length) {
       const entry = stack.pop()!;
       rows.push(entry);
       if (!state.settings.collapsed.includes(entry.folder.id))
         stack.push(
-          ...state.folders
-            .filter((f) => f.parentId === entry.folder.id)
-            .sort((a, b) => b.name.localeCompare(a.name))
+          ...sortFolders(state.folders.filter(f => f.parentId === entry.folder.id), (a, b) => a.name.localeCompare(b.name))
+            .reverse()
             .map((folder) => ({ folder, depth: entry.depth + 1 })),
         );
     }
     return rows.map(({ folder: f, depth }) => (
       <div
         className={`tree-row ${folderId === f.id ? "active" : ""}`}
+        data-sidebar-folder-id={f.id}
         key={f.id}
         style={{ paddingLeft: 8 + depth * 16 }}
         {...dropProps(f.id)}
         {...dragProps({ kind: "folder", id: f.id })}
+        onPointerDownCapture={e => {
+          if (renaming?.surface === 'sidebar' && renaming.id === f.id &&
+            e.button === 0 && !isTextInput(e.target as HTMLElement)) e.preventDefault();
+        }}
         onContextMenu={(e) => context(e, { kind: "folder", id: f.id })}
       >
         <button
           className="chevron"
-          disabled={!state.folders.some((x) => x.parentId === f.id)}
+          disabled={(renaming?.surface === 'sidebar' && renaming.id === f.id) || !state.folders.some((x) => x.parentId === f.id)}
           aria-label={`${f.name} ${state.settings.collapsed.includes(f.id) ? t("expand") : t("collapse")}`}
           aria-expanded={!state.settings.collapsed.includes(f.id)}
           onClick={() =>
@@ -594,19 +646,22 @@ export function App() {
           }
         >
           {state.folders.some((x) => x.parentId === f.id)
-            ? state.settings.collapsed.includes(f.id)
-              ? "›"
-              : "⌄"
-            : ""}
+            ? <UiIcon name={state.settings.collapsed.includes(f.id) ? 'chevronRight' : 'chevronDown'} />
+            : null}
         </button>
-        <button
+        {renaming?.surface === 'sidebar' && renaming.id === f.id ? <div className="tree-name tree-name-editing">
+          <span className="folder-icon" aria-hidden="true"><FolderIcon color={f.color} /></span>
+          <InlineRename value={f.name} save={name => commit(s => renameItem(s, { kind: 'folder', id: f.id }, name))}
+            close={closeRename} />
+        </div> : <button
           className="tree-name"
-          title={f.name}
           onClick={() => go(`folder:${f.id}`)}
         >
-          <span className="folder-icon" aria-hidden="true">▰</span> {f.name}
-          {f.favorite && <span aria-label={t("favorite")}> ★</span>}
-        </button>
+          <span className="folder-icon" aria-hidden="true"><FolderIcon color={f.color} /></span>
+          <TruncatedName>{f.name}</TruncatedName>
+        </button>}
+        <FolderPinButton pinned={!!f.pinned} name={f.name} onToggle={() => pinFolder(f.id)}
+          disabled={renaming?.kind === 'folder' && renaming.id === f.id} />
       </div>
     ));
   }
@@ -628,7 +683,7 @@ export function App() {
       matchesChat(state, c, search, state.settings.projectFilter ?? "all"),
     );
   } else if (location === "favorites") {
-    folders = state.folders.filter((f) => f.favorite);
+    folders = [];
     chats = state.conversations.filter((c) => c.favorite);
   } else if (location === "home") {
     folders = state.folders.filter((f) => !f.parentId);
@@ -638,17 +693,13 @@ export function App() {
       : [];
     chats = state.conversations.filter((c) => c.folderId === folderId);
   }
-  folders.sort(
+  if (location === "favorites") folders = [];
+  folders = sortFolders(folders,
     (a, b) =>
       a.name.localeCompare(b.name, undefined, { numeric: true }) *
       (state.settings.direction === "asc" ? 1 : -1),
   );
   chats = filterChats(chats);
-  if (
-    (state.settings.projectFilter ?? "all") !== "all" ||
-    state.settings.colorFilter !== "all"
-  )
-    folders = [];
   const homeFavorites = filterChats(
     state.conversations.filter((c) => c.favorite),
   );
@@ -657,13 +708,6 @@ export function App() {
   )
     .sort((a, b) => (b.lastOpenedAt ?? 0) - (a.lastOpenedAt ?? 0))
     .slice(0, 20);
-  const homeFolders =
-    (state.settings.projectFilter ?? "all") === "all" &&
-    state.settings.colorFilter === "all"
-      ? state.folders.filter((f) => f.favorite)
-      : [];
-  if (location === "home" && !query)
-    folders = folders.filter((f) => !f.favorite);
   const asItems = (fs: Folder[], cs: Conversation[]): Item[] => [
     ...fs.map((f) => ({ kind: "folder" as const, id: f.id })),
     ...cs.map((c) => ({ kind: "conversation" as const, id: c.id })),
@@ -672,7 +716,7 @@ export function App() {
     ...new Map(
       (location === "home" && !query
         ? [
-            ...asItems(homeFolders, homeFavorites),
+            ...asItems([], homeFavorites),
             ...asItems(folders, homeRecent),
           ]
         : asItems(folders, chats)
@@ -682,6 +726,13 @@ export function App() {
   const activeItems = visibleItems.filter((i) =>
     selection.ids.includes(itemKey(i)),
   );
+  const marquee = useMarquee({ keys: visibleItems.map(itemKey), selection, select: setSelection,
+    scope: JSON.stringify([location, search, state.settings.projectFilter, state.settings.colorFilter,
+      state.settings.sort, state.settings.direction, state.settings.uiScale, visibleItems.map(itemKey)]),
+    disabled: !!(editor || candidates || palette || drag),
+  });
+  const mixedSelection = activeItems.some(i => i.kind === 'folder') &&
+    activeItems.some(i => i.kind === 'conversation');
   const selected = activeItems[0] ?? null;
   const projects = [
     ...new Map(
@@ -717,6 +768,7 @@ export function App() {
         tabIndex={0}
         aria-selected={active}
         className={`item-row ${active ? "selected" : ""}`}
+        data-item-key={itemKey(item)}
         key={`${item.kind}:${item.id}`}
         onClick={(e) => {
           setSelection((previous) =>
@@ -767,11 +819,11 @@ export function App() {
             setEditor({ kind: "color", item });
           }}
           nameEditor={
-            renaming && itemKey(renaming) === itemKey(item) ? (
+            renaming && renaming.surface !== 'sidebar' && itemKey(renaming) === itemKey(item) ? (
               <InlineRename
                 value={f?.name ?? c?.title ?? ""}
                 save={(name) => commit((s) => renameItem(s, item, name))}
-                close={() => setRenaming(null)}
+                close={closeRename}
               />
             ) : undefined
           }
@@ -779,7 +831,10 @@ export function App() {
         <span role="cell" className="date-cell">
           {formatDate(c?.lastOpenedAt ?? null)}
         </span>
-        <span role="cell">
+        <span role="cell" className="row-actions">
+          {f ? <FolderPinButton pinned={!!f.pinned} name={f.name} onToggle={() => pinFolder(f.id)}
+              disabled={renaming?.kind === 'folder' && renaming.id === f.id} />
+            : <FavoriteButton favorite={!!c?.favorite} name={c?.title ?? ""} onToggle={() => favorite(item)} />}
           <button
             className="row-menu"
             aria-label={t("itemMenu", { name: f?.name ?? c?.title ?? "" })}
@@ -790,12 +845,11 @@ export function App() {
               if (!selection.ids.includes(itemKey(item))) setSelected(item);
               setMenu({
                 item,
-                x: Math.max(8, Math.min(rect.left, window.innerWidth - 240)),
-                y: Math.max(8, Math.min(rect.bottom, window.innerHeight - 330)),
+                ...menuPosition(rect.left, rect.bottom, window.innerWidth, window.innerHeight, state.settings.uiScale),
               });
             }}
           >
-            ⋯
+            <UiIcon name="more" />
           </button>
         </span>
       </div>
@@ -805,9 +859,25 @@ export function App() {
     ...fs.map((f) => row({ kind: "folder", id: f.id })),
     ...cs.map((c) => row({ kind: "conversation", id: c.id })),
   ];
+  useEffect(() => {
+    // A freshly opened Explorer can have body focus, outside React's app wrapper.
+    const selectVisible = (e: globalThis.KeyboardEvent) => {
+      if (!ready || editor || candidates || palette || e.defaultPrevented ||
+        !(e.ctrlKey || e.metaKey) || e.altKey || e.shiftKey || e.key.toLowerCase() !== 'a' ||
+        !(e.target instanceof Element) || isTextInput(e.target, false)) return;
+      e.preventDefault();
+      setSelection({
+        ids: visibleItems.map(itemKey),
+        anchor: visibleItems[0] ? itemKey(visibleItems[0]) : null,
+      });
+    };
+    document.addEventListener('keydown', selectVisible);
+    return () => document.removeEventListener('keydown', selectVisible);
+  }, [ready, editor, candidates, palette, visibleItems]);
   if (!ready) return <div className="loading">{t("loading")}</div>;
   return (
     <div className="app" onKeyDown={key}>
+      {drag && <div className="drag-count" role="status">{t(drag.length === 1 ? 'movingItem' : 'movingItems', { count: drag.length })}</div>}
       <div className="toolbar">
         <div className="nav-buttons">
           <button
@@ -816,7 +886,7 @@ export function App() {
             disabled={history.index === 0}
             onClick={() => back(-1)}
           >
-            ←
+            <UiIcon name="back" />
           </button>
           <button
             title={t("forwardAltRight")}
@@ -824,45 +894,48 @@ export function App() {
             disabled={history.index === history.entries.length - 1}
             onClick={() => back(1)}
           >
-            →
+            <UiIcon name="forward" />
           </button>
         </div>
         <nav className="breadcrumb" aria-label={t("breadcrumb")}>
-          <button onClick={() => go("home")}>{t("home")}</button>
+          <button onClick={() => go("home")}><UiIcon name="home" />{t("home")}</button>
           {path.map((f) => (
             <span key={f.id}>
               {" "}
-              › <button onClick={() => go(`folder:${f.id}`)}>{f.name}</button>
+              <UiIcon name="chevronRight" /><button onClick={() => go(`folder:${f.id}`)}>{f.name}</button>
             </span>
           ))}
-          {!folderId && location !== "home" && <span> › {title}</span>}
+          {!folderId && location !== "home" && <span><UiIcon name="chevronRight" />{title}</span>}
         </nav>
-        <input
-          ref={searchRef}
-          type="search"
-          aria-label={t("search")}
-          placeholder={t("search")}
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-        />
+        <label className="search-field">
+          <UiIcon name="search" />
+          <input
+            ref={searchRef}
+            type="search"
+            aria-label={t("search")}
+            placeholder={t("search")}
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+        </label>
         <button
           className="settings-button"
           onClick={() => setEditor({ kind: "settings" })}
           title={t("settings")}
           aria-label={t("settings")}
         >
-          ⚙
+          <UiIcon name="settings" size={18} />
         </button>
       </div>
       <div className="commandbar">
         <button onClick={() => setEditor({ kind: "new", parentId: folderId })}>
-          {t("newFolder")}
+          <UiIcon name="newFolder" />{t("newFolder")}
         </button>
         <button disabled={discovering} onClick={() => void discover()}>
-          {t("currentChat")}
+          <UiIcon name="currentChat" />{t("currentChat")}
         </button>
         <button disabled={discovering} onClick={() => void discover("page")}>
-          {t("importChats")}
+          <UiIcon name="import" />{t("importChats")}
         </button>
         <details
           className="overflow"
@@ -878,11 +951,11 @@ export function App() {
           }}
         >
           <summary aria-label={t("moreActions")} title={t("moreActions")}>
-            ⋯
+            <UiIcon name="more" />
           </summary>
           <div className="overflow-menu">
             <button onClick={() => setPalette(true)}>
-              {t("commandPalette")}
+              <UiIcon name="commands" />{t("commandPalette")}
             </button>
             <button
               onClick={(e) => {
@@ -890,7 +963,7 @@ export function App() {
                 setEditor({ kind: "add", title: "", url: "" });
               }}
             >
-              {t("addByUrl")}
+              <UiIcon name="connect" />{t("addByUrl")}
             </button>
             <button
               disabled={discovering}
@@ -899,13 +972,12 @@ export function App() {
                 void discover("tabs");
               }}
             >
-              {t("importOpenTabs")}
+              <UiIcon name="import" />{t("importOpenTabs")}
             </button>
           </div>
         </details>
         <div className="spacer" />
         <label>
-          {t("sort")}{" "}
           <select
             aria-label={t("sortBy")}
             value={state.settings.sort}
@@ -928,11 +1000,12 @@ export function App() {
             })
           }
         >
-          {state.settings.direction === "asc" ? "↑" : "↓"}
+          <UiIcon name={state.settings.direction === 'asc' ? 'sortAscending' : 'sortDescending'} />
         </button>
       </div>
       {(notice || importSession) && (
         <div className="notice" role="status">
+          <UiIcon name="info" />
           <span>{importSession ? t("scanFound", scanProgress) : notice}</span>
           {importSession ? (
             <button disabled={stopping} onClick={() => void stopScan()}>
@@ -944,7 +1017,7 @@ export function App() {
               aria-label={t("dismiss")}
               onClick={() => setNotice("")}
             >
-              ×
+              <UiIcon name="close" />
             </button>
           )}
         </div>
@@ -954,39 +1027,45 @@ export function App() {
           <button
             className={`side-link ${location === "home" ? "active" : ""}`}
             onClick={() => go("home")}
-            {...dropProps(null)}
+            {...dropProps(null, 'system:home')}
           >
-            ⌂ {t("home")}
+            <UiIcon name="home" />{t("home")}
           </button>
           <button
             className={`side-link ${location === "favorites" ? "active" : ""}`}
             onClick={() => go("favorites")}
+            {...dropProps(null, 'system:favorites')}
           >
-            ☆ {t("favorites")}
+            <UiIcon name="favorite" />{t("favorites")}
           </button>
           <button
             className={`side-link ${location === "inbox" ? "active" : ""}`}
             onClick={() => go("inbox")}
-            {...dropProps(null)}
+            {...dropProps(null, 'system:inbox')}
           >
-            ▤ {t("inbox")}{" "}
+            <UiIcon name="inbox" />{t("inbox")}{" "}
             <span className="count">
               {state.conversations.filter((c) => !c.folderId).length}
             </span>
           </button>
-          <div className="side-heading" {...dropProps(null)}>
+          <div className="side-heading" {...dropProps(null, 'system:folders')}>
             {t("fOLDERS")}{" "}
             <button
               aria-label={t("newRootFolder")}
               title={t("newRootFolder")}
               onClick={() => setEditor({ kind: "new", parentId: null })}
             >
-              +
+              <UiIcon name="newFolder" />
             </button>
           </div>
           <div className="tree">{folderTree()}</div>
         </aside>
-        <main onClick={() => setMenu(null)}>
+        <main ref={marquee.ref} {...marquee.handlers} onClick={() => setMenu(null)}
+          className={marquee.rectangle ? 'marquee-active' : undefined}>
+          {marquee.rectangle && <div className="selection-marquee" aria-hidden="true" style={{
+            left: marquee.rectangle.x, top: marquee.rectangle.y,
+            width: marquee.rectangle.width, height: marquee.rectangle.height,
+          }} />}
           <div className="view-heading">
             <h1>{title}</h1>
             <select
@@ -1039,9 +1118,8 @@ export function App() {
             {location === "home" && !query ? (
               <>
                 <h3>{t("favorites")}</h3>
-                {list(homeFolders, homeFavorites)}
-                {!state.folders.some((f) => f.favorite) &&
-                  !state.conversations.some((c) => c.favorite) && (
+                {list([], homeFavorites)}
+                {!state.conversations.some((c) => c.favorite) && (
                     <p className="empty-small">{t("noItems")}</p>
                   )}
                 <h3>{t("folders")}</h3>
@@ -1132,12 +1210,12 @@ export function App() {
                   setMenu(null);
                 }}
               >
-                {t("newFolder")}
+                <span className="icon-label"><UiIcon name="newFolder" />{t("newFolder")}</span>
               </button>
             )}
             <button
               role="menuitem"
-              onClick={() => showEditor("rename", menu.item)}
+              onClick={() => showEditor("rename", menu.item, menu.surface)}
             >
               {t("rename")}
               <kbd>{t("f2")}</kbd>
@@ -1148,21 +1226,19 @@ export function App() {
             >
               {t("move")}
             </button>
-            {menu.item.kind === "conversation" && (
               <button
                 role="menuitem"
+                disabled={mixedSelection}
                 onClick={() => showEditor("color", menu.item)}
               >
                 {t("colorAction")}
               </button>
-            )}
-            <button role="menuitem" onClick={() => favorite(menu.item)}>
-              {(menu.item.kind === "folder"
-                ? state.folders.find((f) => f.id === menu.item.id)
-                : state.conversations.find((c) => c.id === menu.item.id)
-              )?.favorite
-                ? t("removeFromFavorites")
-                : t("addToFavorites")}
+            <button role="menuitem" onClick={() => menu.item.kind === 'folder' ? pinFolder(menu.item.id) : favorite(menu.item)}>
+              <span className="icon-label"><UiIcon name={menu.item.kind === 'folder' ? 'pin' : 'favorite'} />
+              {menu.item.kind === 'folder'
+                ? t(state.folders.find(f => f.id === menu.item.id)?.pinned ? 'unpinFolder' : 'pinFolder')
+                : t(state.conversations.find(c => c.id === menu.item.id)?.favorite ? 'removeFromFavorites' : 'addToFavorites')}
+              </span>
             </button>
             <hr />
             <button
@@ -1218,33 +1294,20 @@ export function App() {
             {
               label: t("colorAction"),
               enabled:
-                activeItems.length > 0 &&
-                activeItems.every((i) => i.kind === "conversation") &&
-                !readOnly,
+                activeItems.length > 0 && !mixedSelection && !readOnly,
               run: () => selected && showEditor("color", selected),
             },
-            ...([true, false] as const).map((value) => ({
-              label: t(value ? "addToFavorites" : "removeFromFavorites"),
-              enabled: activeItems.length > 0 && !readOnly,
-              run: () => {
-                void commit((s) => ({
-                  ...s,
-                  folders: s.folders.map((f) =>
-                    activeItems.some(
-                      (i) => i.kind === "folder" && i.id === f.id,
-                    )
-                      ? { ...f, favorite: value }
-                      : f,
-                  ),
-                  conversations: s.conversations.map((c) =>
-                    activeItems.some(
-                      (i) => i.kind === "conversation" && i.id === c.id,
-                    )
-                      ? { ...c, favorite: value }
-                      : c,
-                  ),
-                }));
-              },
+            ...([true, false] as const).map(value => ({
+              label: t(value ? 'pinFolder' : 'unpinFolder'),
+              enabled: activeItems.some(i => i.kind === 'folder') && !readOnly,
+              run: () => { void commit(s => ({ ...s, folders: s.folders.map(f =>
+                activeItems.some(i => i.kind === 'folder' && i.id === f.id) ? { ...f, pinned: value } : f) })); },
+            })),
+            ...([true, false] as const).map(value => ({
+              label: t(value ? 'addToFavorites' : 'removeFromFavorites'),
+              enabled: activeItems.some(i => i.kind === 'conversation') && !readOnly,
+              run: () => { void commit(s => ({ ...s, conversations: s.conversations.map(c =>
+                activeItems.some(i => i.kind === 'conversation' && i.id === c.id) ? { ...c, favorite: value } : c) })); },
             })),
             {
               label: t("removeFromExplorer"),
@@ -1347,7 +1410,7 @@ function EditorDialog({
     ),
     [url, setUrl] = useState(editor.kind === "add" ? editor.url : ""),
     [target, setTarget] = useState(folder?.parentId ?? chat?.folderId ?? ""),
-    [color, setColor] = useState(chat?.color ?? "#ffffff"),
+    [color, setColor] = useState(chat?.color ?? folder?.color ?? (folder ? '' : '#ffffff')),
     [error, setError] = useState(""),
     [busy, setBusy] = useState(false),
     [prefs, setPrefs] = useState(state.settings),
@@ -1362,7 +1425,7 @@ function EditorDialog({
     add: t("addByUrl"),
     new: t("newFolder"),
     move: t("moveToFolder"),
-    color: t("colorLabel"),
+    color: t(item?.kind === "folder" ? "folderColor" : "colorLabel"),
     delete:
       item?.kind === "folder" ? t("deleteFolder") : t("removeFromExplorer"),
     settings: t("settings"),
@@ -1373,7 +1436,7 @@ function EditorDialog({
     try {
       if ((editor.kind === "add" || editor.kind === "new") && !name.trim())
         throw Error(t("enterAName"));
-      if (editor.kind === "color" && !validColor(color))
+      if (editor.kind === "color" && !validColor(color) && !(color === '' && items.every(i => i.kind === 'folder')))
         throw Error(t("enterAColorAsRRGGBB"));
       if (Object.values(colorNames).some((value) => !value.trim()))
         throw Error(t("enterAName"));
@@ -1399,7 +1462,7 @@ function EditorDialog({
                 name: name.trim(),
                 parentId: editor.parentId,
                 createdAt: Date.now(),
-                favorite: false,
+                pinned: false,
               },
             ],
             settings: {
@@ -1415,7 +1478,7 @@ function EditorDialog({
             throw Error(t("chooseAStartupFolder"));
           return {
             ...s,
-            settings: { ...prefs, lastLocation: s.settings.lastLocation },
+            settings: { ...prefs, lastLocation: s.settings.lastLocation, ...(s.settings.uiScale !== undefined ? { uiScale: s.settings.uiScale } : {}) },
             colorRules: (colors.join(",") === initialColorOrder.current
               ? s.colorRules.map((r) => r.color)
               : [
@@ -1452,27 +1515,14 @@ function EditorDialog({
           );
         if (editor.kind === "color") {
           const normalized = color.toLowerCase();
+          if (item?.kind === "folder")
+            return assignColor(s, items.filter(i => i.kind === "folder"), normalized || null);
           let next = s;
           for (const [key, value] of Object.entries(colorNames))
             next = renameColor(next, key, value);
-          if (!next.colorRules.some((r) => r.color === normalized))
+          if (normalized && !next.colorRules.some((r) => r.color === normalized))
             next = renameColor(next, normalized, shownColorName(normalized));
-          if (
-            !next.conversations.some(
-              (c) =>
-                items.some((i) => i.kind === "conversation" && i.id === c.id) &&
-                c.color !== normalized,
-            )
-          )
-            return next;
-          return {
-            ...next,
-            conversations: next.conversations.map((c) =>
-              items.some((i) => i.kind === "conversation" && i.id === c.id)
-                ? { ...c, color: normalized }
-                : c,
-            ),
-          };
+          return assignColor(next, items.filter(i => i.kind === "conversation"), normalized || null);
         }
         return s;
       });
@@ -1573,7 +1623,10 @@ function EditorDialog({
             <p className="hint">{t("chatGPTProjectsAreNotChanged")}</p>
           </>
         )}
-        {editor.kind === "color" && (
+        {editor.kind === "color" && item?.kind === "folder" && (
+          <FolderColorFields color={color} change={setColor} />
+        )}
+        {editor.kind === "color" && item?.kind === "conversation" && (
           <>
             <div className="swatches">
               {state.colorRules.map((r) => (
@@ -1593,7 +1646,7 @@ function EditorDialog({
               <input
                 maxLength={100}
                 disabled={!validColor(color)}
-                value={shownColorName(color)}
+                value={validColor(color) ? shownColorName(color) : ''}
                 onChange={(e) => editColorName(color, e.target.value)}
               />
             </label>
@@ -1629,6 +1682,7 @@ function EditorDialog({
                 : t("removeLocalMetadataOnly")}
             </p>
             <p className="safety-note">
+              <UiIcon name="warning" />
               {t("yourChatGPTConversationsWillNotBeDeleted")}
             </p>
           </>
@@ -1736,7 +1790,7 @@ function EditorDialog({
                     disabled={i === 0}
                     onClick={() => reorder(i, -1)}
                   >
-                    ↑
+                    <UiIcon name="up" />
                   </button>
                   <button
                     type="button"
@@ -1745,7 +1799,7 @@ function EditorDialog({
                     disabled={i === colors.length - 1}
                     onClick={() => reorder(i, 1)}
                   >
-                    ↓
+                    <UiIcon name="down" />
                   </button>
                 </div>
               ))}
@@ -1759,10 +1813,12 @@ function EditorDialog({
         )}
         {error && (
           <p role="alert" className="error">
+            <UiIcon name="error" />
             {error}
           </p>
         )}
         <div className="dialog-actions">
+          {editor.kind === "color" && item?.kind === "folder" && <button className="folder-color-reset" type="button" disabled={busy} onClick={() => setColor('')}>{t("resetFolderColor")}</button>}
           <button type="button" disabled={busy || syncBusy} onClick={close}>
             {t("cancel")}
           </button>

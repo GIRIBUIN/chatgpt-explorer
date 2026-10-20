@@ -116,6 +116,11 @@ export function syncDiff(s: AppState, p: Payload) {
   const local = payload(s);
   return {
     ...workspaceDiff(s, p.workspace),
+    // Sync can also clear an optional folder color; merge-only JSON import keeps it.
+    foldersChanged: p.workspace.folders.filter(f => {
+      const old = local.workspace.folders.find(x => x.id === f.id);
+      return old && canonical(old) !== canonical(f);
+    }).length,
     // Workspace JSON import is merge-only; sync also represents clearing/removal.
     chatsChanged: p.workspace.chats.filter(c => {
       const old = local.workspace.chats.find(x => x.id === c.id);

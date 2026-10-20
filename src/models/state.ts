@@ -1,4 +1,6 @@
 import { parseTheme } from "./theme";
+import { uiScale } from './ui-scale';
+import { folderPinned } from './folders';
 import { t } from "../i18n";
 import type { AppState, Conversation, Folder, Item, Location } from "./types";
 import { parseConversationUrl, isProjectId } from "../utils/url";
@@ -223,6 +225,22 @@ const time = (x: unknown) =>
   typeof x === "number" && Number.isFinite(x) && x >= 0 ? x : 0;
 export const validColor = (x: unknown): x is string =>
   typeof x === "string" && /^#[0-9a-f]{6}$/i.test(x);
+export function assignColor(s: AppState, items: Item[], color: string | null): AppState {
+  if (color !== null && !validColor(color)) throw Error(t('enterAColorAsRRGGBB'));
+  const normalized = color?.toLowerCase();
+  return {
+    ...s,
+    folders: s.folders.map(f => {
+      if (!items.some(i => i.kind === 'folder' && i.id === f.id)) return f;
+      const next = { ...f };
+      if (normalized) next.color = normalized;
+      else delete next.color;
+      return next;
+    }),
+    conversations: s.conversations.map(c => normalized && items.some(i => i.kind === 'conversation' && i.id === c.id)
+      ? { ...c, color: normalized } : c),
+  };
+}
 export function normalizeState(raw: unknown): AppState {
   const s = defaults(),
     r = record(raw);
@@ -236,8 +254,9 @@ export function normalizeState(raw: unknown): AppState {
       id,
       name: str(f.name).trim() || t("untitledFolder"),
       parentId: typeof f.parentId === "string" ? f.parentId : null,
-      favorite: f.favorite === true,
+      pinned: folderPinned(f),
       createdAt: time(f.createdAt),
+      ...(validColor(f.color) ? { color: f.color.toLowerCase() } : {}),
     });
   }
   for (const f of s.folders) {
@@ -305,6 +324,7 @@ export function normalizeState(raw: unknown): AppState {
     }
   }
   const preferences = record(r.settings);
+  if (preferences.uiScale !== undefined) s.settings.uiScale = uiScale(preferences.uiScale);
   if (typeof preferences.projectFilter === "string")
     s.settings.projectFilter = preferences.projectFilter;
   if (

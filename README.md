@@ -4,12 +4,18 @@
 
 ## Features frozen for v0.1
 
-- Nested virtual folders, local aliases, favorites, colors with shared preset names.
+- Nested virtual folders with sibling-level pins, local aliases, chat favorites, colors with shared preset names.
+- Folder colors decorate filled folder icons independently of chat color labels: use a folder's context-menu **Color...**. Reset to default restores the yellow folder; names and row backgrounds keep their theme colors.
+- Pin folders using their trailing pin control; pinned folders stay within their parent and retain the existing sort order within each group. Favorites contains chats only. Legacy folder favorites migrate to pins with an original-data backup; update all connected installations before syncing this folder metadata.
 - Search, sort, Project/color filters and structured search: `name:"language models" project:Study color:Important`. Space-separated tokens use AND.
+- Drag a selected item to move the selected chats/folders together; dragging an unselected item moves it alone. Sidebar and main-pane folders accept drops. Self/descendant/system destinations and same-parent no-ops are rejected. Existing Move actions remain available.
+- Click an empty main-list surface to clear selection, or drag a rectangle to select visible folders/chats. Ctrl/Cmd rectangle selection adds to the existing selection.
+- F2 renames the focused user folder in the sidebar in place, as well as selected main-pane items. Enter saves, Escape cancels, and valid edits save on blur; system navigation cannot be renamed.
 - Explorer selection: Ctrl+A selects visible results, Ctrl+Click toggles, Shift+Click selects a range. F2 renames inline; Enter/double-click opens a chat or folder. Text inputs keep their normal shortcuts.
 - Command Palette: Ctrl+Shift+P. Default Explorer window shortcut: Ctrl+Shift+E (Command on macOS); browser shortcut settings can change it.
 - Add Current Chat, Import Open Tabs and Import Chats. Existing sidebar anchors are used for SPA Open when available; new-tab/new-window and full-navigation fallback remain available.
 - Theme JSON import/export/reset; Workspace JSON preview/import/export and a local pre-apply backup.
+- Device-local Interface scale (80–140%) in Settings → Appearance, or Ctrl/Cmd `+`, `-`, `0`. This scales the entire Explorer UI, including icons/controls/dialogs; it does not change browser zoom or sync to other devices.
 - Optional encrypted cross-device sync through **each user's own Dropbox**.
 
 ## Architecture and privacy

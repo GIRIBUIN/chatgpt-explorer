@@ -3,8 +3,9 @@ export type Folder = {
   id: string;
   name: string;
   parentId: string | null;
-  favorite: boolean;
+  pinned?: boolean;
   createdAt: number;
+  color?: string;
 };
 export type Conversation = {
   id: string;
@@ -28,6 +29,8 @@ export type Bounds = {
   height: number;
 };
 export type Settings = {
+  // Device/display preference; excluded from workspace and sync payloads.
+  uiScale?: number;
   defaultOpenBehavior: OpenBehavior;
   startup: "last" | "home" | "favorites" | "folder";
   startupFolderId: string | null;

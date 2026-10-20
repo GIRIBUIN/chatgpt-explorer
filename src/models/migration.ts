@@ -1,4 +1,18 @@
 import { normalizeState } from "./state";
+import { folderPinned } from './folders';
+
+export function migrateFolderPins(raw: unknown): unknown {
+  if (!raw || typeof raw !== 'object' || !('folders' in raw) || !Array.isArray(raw.folders)) return raw;
+  let changed = false;
+  const folders = raw.folders.map(value => {
+    if (!value || typeof value !== 'object' || typeof value.favorite !== 'boolean') return value;
+    changed = true;
+    const { favorite: _legacy, ...folder } = value;
+    void _legacy;
+    return { ...folder, pinned: folderPinned(value) };
+  });
+  return changed ? { ...raw, folders } : raw;
+}
 // Additive v1 → v2 upgrade. Validation and corruption recovery remain separate.
 export function migrateV1(raw: unknown): unknown {
   if (

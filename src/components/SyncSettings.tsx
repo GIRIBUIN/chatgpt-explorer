@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { UiIcon } from './UiIcon';
 import type { AppState } from "../models/types";
 import {
   SyncClient,
@@ -173,6 +174,7 @@ export function SyncSettings({
             </label>
             <p className="hint">{t("automaticSyncDescription")}</p>
             {!busy && (automatic.conflict || automatic.error || automatic.dirty) && <p role="status">
+              <UiIcon name={automatic.conflict ? 'warning' : automatic.error ? 'error' : 'info'} />
               {automatic.conflict ? t("syncConflict") : automatic.error
                 ? t(dropbox && automatic.error === 'reconnect-required' ? 'dropboxReconnectRequired'
                   : dropbox && automatic.error === 'temporarily-unavailable' ? 'dropboxUnavailable' : 'autoSyncError')
@@ -262,14 +264,14 @@ export function SyncSettings({
                 )
               }
             >
-              {t("disconnect")}
+                {t("disconnect")}
             </button>
           </div>
         )}
         {connecting && (
           <>
             <label>
-              {t(keyed ? 'syncKey' : "syncCode")}
+              <span className="icon-label"><UiIcon name="key" />{t(keyed ? 'syncKey' : "syncCode")}</span>
               <input
                 type="password"
                 autoComplete="off"
@@ -278,7 +280,7 @@ export function SyncSettings({
                 onChange={(e) => setCode(e.target.value)}
               />
             </label>
-            <p className="hint">{t(keyed ? 'syncKeyWarning' : "syncCodeWarning")}</p>
+            <p className="hint"><UiIcon name="lock" />{t(keyed ? 'syncKeyWarning' : "syncCodeWarning")}</p>
             <div className="dialog-actions settings-actions">
               <button
                 type="button"
@@ -318,7 +320,7 @@ export function SyncSettings({
         )}
         {shown && connection && (
           <>
-            <p className="safety-note">{t(keyed ? 'syncKeyWarning' : "syncCodeWarning")}</p>
+            <p className="safety-note"><UiIcon name="lock" />{t(keyed ? 'syncKeyWarning' : "syncCodeWarning")}</p>
             <input
               type="text"
               aria-label={t(keyed ? 'syncKey' : "syncCode")}
@@ -344,6 +346,7 @@ export function SyncSettings({
         {preview && diff && (
           <section aria-label={t("syncPreview")}>
             <h3>
+              <UiIcon name={preview.kind === 'conflict' ? 'warning' : 'download'} />
               {t(preview.kind === "conflict" ? "syncConflict" : "remoteFound")}
             </h3>
             <p className="hint">
@@ -412,7 +415,7 @@ export function SyncSettings({
             </div>
           </section>
         )}
-        {busy && <p role="status">{t("syncWorking")}</p>}
+        {busy && <p role="status"><UiIcon name="sync" />{t("syncWorking")}</p>}
         {message && <p role="status">{message}</p>}
       </div>
     </section>

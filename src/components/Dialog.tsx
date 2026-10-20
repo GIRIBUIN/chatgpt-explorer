@@ -1,4 +1,5 @@
 import { t } from "../i18n";
+import { UiIcon } from './UiIcon';
 import { useEffect, useRef, type ReactNode } from "react";
 export function Dialog({
   title,
@@ -32,7 +33,7 @@ export function Dialog({
           aria-label={t("close")}
           title={t("close")}
         >
-          ×
+          <UiIcon name="close" />
         </button>
       </header>
       {children}

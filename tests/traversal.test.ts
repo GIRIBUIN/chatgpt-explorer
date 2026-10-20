@@ -138,7 +138,7 @@ it("preserves different project evidence across pages and enriches missing names
     id: "f",
     name: "Folder",
     parentId: null,
-    favorite: false,
+    pinned: false,
     createdAt: 1,
   });
   state.conversations[0] = {

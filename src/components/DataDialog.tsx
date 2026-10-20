@@ -10,6 +10,8 @@ import {
 } from "../models/workspace";
 import { webext } from "../utils/browser";
 import { t } from "../i18n";
+import { UiIcon } from './UiIcon';
+import { InterfaceScale } from './InterfaceScale';
 export function downloadJson(name: string, value: unknown) {
   const url = URL.createObjectURL(
     new Blob([JSON.stringify(value, null, 2)], { type: "application/json" }),
@@ -83,6 +85,7 @@ export function DataDialog({
   return (
     <section className="data-settings">
       <h3>{t("appearance")}</h3>
+      <InterfaceScale value={state.settings.uiScale} change={value => void commit(s => ({ ...s, settings: { ...s.settings, uiScale: value } }))} />
       <div className="settings-row" role="group" aria-label={t("theme")}>
         <span>{t("theme")}</span>
         <p className="hint">{t("themeDescription")}</p>
@@ -221,7 +224,7 @@ export function DataDialog({
             ))}
           </ul>
           <p>{t("workspaceMergeHint")}</p>
-          {stale && <p role="alert">{t("previewStale")}</p>}
+          {stale && <p role="alert"><UiIcon name="warning" />{t("previewStale")}</p>}
           <div className="dialog-actions">
             <button
               type="button"
@@ -241,7 +244,7 @@ export function DataDialog({
           </div>
         </section>
       )}
-      {error && <p role="alert">{error}</p>}
+      {error && <p role="alert"><UiIcon name="error" />{error}</p>}
     </section>
   );
 }

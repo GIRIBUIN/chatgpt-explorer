@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Dialog } from "./Dialog";
 import { t } from "../i18n";
+import { UiIcon } from './UiIcon';
 export type Command = { label: string; enabled: boolean; run: () => void };
 export function CommandPalette({
   commands,
@@ -21,27 +22,30 @@ export function CommandPalette({
   };
   return (
     <Dialog title={t("commandPalette")} onClose={close}>
-      <input
-        autoFocus
-        aria-label={t("searchCommands")}
-        value={query}
-        onChange={(e) => setQuery(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === "Enter") {
-            e.preventDefault();
-            const c = filtered.find((c) => c.enabled);
-            if (c) run(c);
-          }
-          if (e.key === "ArrowDown") {
-            e.preventDefault();
-            e.currentTarget.parentElement
-              ?.querySelector<HTMLButtonElement>(
-                ".palette-list button:not(:disabled)",
-              )
-              ?.focus();
-          }
-        }}
-      />
+      <label className="search-field">
+        <UiIcon name="search" />
+        <input
+          autoFocus
+          aria-label={t("searchCommands")}
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              const c = filtered.find((c) => c.enabled);
+              if (c) run(c);
+            }
+            if (e.key === "ArrowDown") {
+              e.preventDefault();
+              e.currentTarget.closest('dialog')
+                ?.querySelector<HTMLButtonElement>(
+                  ".palette-list button:not(:disabled)",
+                )
+                ?.focus();
+            }
+          }}
+        />
+      </label>
       <div className="palette-list">
         {filtered.map((c) => (
           <button key={c.label} disabled={!c.enabled} onClick={() => run(c)}>

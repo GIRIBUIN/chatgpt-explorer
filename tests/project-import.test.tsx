@@ -118,7 +118,7 @@ describe("project import evidence", () => {
   it("deduplicates and enriches only source metadata, preserving all user metadata", () => {
     let s = defaults();
     s.folders = [
-      { id: "f", name: "Mine", parentId: null, favorite: false, createdAt: 5 },
+      { id: "f", name: "Mine", parentId: null, pinned: false, createdAt: 5 },
     ];
     s = addConversation(
       s,

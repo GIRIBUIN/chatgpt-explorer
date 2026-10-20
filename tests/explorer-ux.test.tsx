@@ -57,6 +57,13 @@ describe("Explorer selection and rename", () => {
     expect(isTextInput({ closest: () => ({}) } as unknown as Element)).toBe(
       true,
     ));
+  it('text input guard recognizes inherited/empty/plaintext-only contenteditable state', () => {
+    expect(isTextInput({ closest: () => null, isContentEditable: true } as unknown as Element)).toBe(true);
+    expect(isTextInput({ closest: () => null, isContentEditable: false } as unknown as Element)).toBe(false);
+    const select = { closest: (selector: string) => selector.includes('select') ? {} : null } as unknown as Element;
+    expect(isTextInput(select)).toBe(true);
+    expect(isTextInput(select, false)).toBe(false);
+  });
   it("inline save trims while blank leaves data unchanged", () => {
     const s = make();
     expect(renameItem(s, { kind: "conversation", id: "chat-one" }, "  ")).toBe(
@@ -180,8 +187,8 @@ describe("Workspace JSON", () => {
   it("rejects cycles and nonexistent parents", () => {
     const w = exportWorkspace(make());
     w.folders = [
-      { id: "a", name: "A", parentId: "b", favorite: false },
-      { id: "b", name: "B", parentId: "a", favorite: false },
+      { id: "a", name: "A", parentId: "b", pinned: false },
+      { id: "b", name: "B", parentId: "a", pinned: false },
     ];
     expect(() => parseWorkspace(w)).toThrow("cycle");
     w.folders[0].parentId = "missing";
@@ -203,7 +210,7 @@ describe("Workspace JSON", () => {
       id: "f",
       name: "Folder",
       parentId: null,
-      favorite: false,
+      pinned: false,
     });
     w.chats[0].folderId = "f";
     w.chats[0].displayName = "Renamed";
@@ -232,13 +239,13 @@ describe("Workspace JSON", () => {
   it("validates retained hierarchy after merge", () => {
     const s = make();
     s.folders = [
-      { id: "a", name: "A", parentId: "b", favorite: false, createdAt: 0 },
-      { id: "b", name: "B", parentId: null, favorite: false, createdAt: 0 },
+      { id: "a", name: "A", parentId: "b", pinned: false, createdAt: 0 },
+      { id: "b", name: "B", parentId: null, pinned: false, createdAt: 0 },
     ];
     const w = exportWorkspace(s);
     w.folders = [
-      { id: "a", name: "A", parentId: null, favorite: false },
-      { id: "b", name: "B", parentId: "a", favorite: false },
+      { id: "a", name: "A", parentId: null, pinned: false },
+      { id: "b", name: "B", parentId: "a", pinned: false },
     ];
     expect(() => applyWorkspace(s, w)).not.toThrow();
   });

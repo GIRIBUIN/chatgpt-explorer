@@ -138,7 +138,7 @@ it("deleted startup folder is normalized without changing local device settings"
 });
 it("invalid local workspace is rejected before it can be uploaded", () => {
   const s = defaults();
-  s.folders.push({ id: "broken", name: "Broken", parentId: "missing", favorite: false, createdAt: 1 });
+  s.folders.push({ id: "broken", name: "Broken", parentId: "missing", pinned: false, createdAt: 1 });
   expect(() => payload(s)).toThrow();
 });
 

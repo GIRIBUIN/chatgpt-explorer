@@ -51,6 +51,10 @@ try {
         (await chrome.storage.local.get("explorerState")).explorerState,
     );
   await explorer.getByRole("button", { name: /Inbox/ }).click();
+  const storageDeadline = Date.now() + 5000;
+  while (!(await read()) && Date.now() < storageDeadline)
+    await new Promise(resolve => setTimeout(resolve, 25));
+  assert.ok(await read(), 'Explorer initial local state must be saved before seeding');
   await worker.evaluate(async () => {
     const { explorerState: s } =
       await chrome.storage.local.get("explorerState");
@@ -91,6 +95,53 @@ try {
   }
   await rows.first().waitFor();
   await visibleRows(5);
+  // Fresh body focus must not require clicking an item to create a selection context.
+  const bodyFocus = () => explorer.evaluate(() => document.activeElement?.blur());
+  await bodyFocus();
+  assert.equal(await explorer.locator('.item-row.selected').count(), 0);
+  await explorer.keyboard.press('Control+a');
+  assert.equal(await explorer.locator('.item-row.selected').count(), 5);
+  await explorer.keyboard.press('Control+a');
+  assert.equal(await explorer.locator('.item-row.selected').count(), 5);
+  // Only Favorites in main content are selected, never the folder tree or Inbox.
+  await rows.nth(4).hover();
+  await rows.nth(4).getByRole('button', { name: 'Add to Favorites: Chat 4', exact: true }).click();
+  await rows.nth(4).getByRole('button', { name: 'Remove from Favorites: Chat 4', exact: true }).waitFor();
+  await explorer.getByRole('button', { name: 'Favorites', exact: true }).click();
+  await visibleRows(1); await bodyFocus();
+  await explorer.keyboard.press('Control+a');
+  assert.equal(await explorer.locator('.item-row.selected').count(), 1);
+  await explorer.getByRole('button', { name: /Inbox/ }).click();
+  await visibleRows(5);
+  await rows.nth(4).getByRole('button', { name: 'Remove from Favorites: Chat 4', exact: true }).click();
+  await rows.nth(4).getByRole('button', { name: 'Add to Favorites: Chat 4', exact: true }).waitFor();
+  // Modal text inputs keep native Select All and do not touch main-view selection.
+  await explorer.getByRole('button', { name: 'New Folder', exact: true }).click();
+  const modalName = explorer.getByRole('textbox', { name: 'Display name', exact: true });
+  await modalName.fill('Temporary folder');
+  const beforeModal = await explorer.locator('.item-row.selected').count();
+  await modalName.press('Control+a');
+  assert.equal(await modalName.evaluate(el => el.selectionEnd - el.selectionStart), 16);
+  assert.equal(await explorer.locator('.item-row.selected').count(), beforeModal);
+  await explorer.getByRole('button', { name: 'Cancel', exact: true }).click();
+  for (const kind of ['textarea', '', 'plaintext-only']) {
+    const before = await explorer.locator('.item-row.selected').count();
+    await explorer.evaluate(kind => {
+      const field = document.createElement(kind === 'textarea' ? 'textarea' : 'div');
+      field.id = 'native-select-all-probe';
+      if (kind === 'textarea') field.value = 'Editable text';
+      else { field.setAttribute('contenteditable', kind); field.textContent = 'Editable text'; }
+      document.body.append(field); field.focus();
+    }, kind);
+    await explorer.keyboard.press('Control+a');
+    const text = await explorer.evaluate(() => {
+      const el = document.getElementById('native-select-all-probe');
+      return el instanceof HTMLTextAreaElement ? el.value.slice(el.selectionStart, el.selectionEnd) : getSelection().toString();
+    });
+    assert.equal(text, 'Editable text');
+    assert.equal(await explorer.locator('.item-row.selected').count(), before);
+    await explorer.locator('#native-select-all-probe').evaluate(el => el.remove());
+  }
   await rows.nth(0).click();
   await rows.nth(2).click({ modifiers: ["Control"] });
   assert.equal(await explorer.locator(".item-row.selected").count(), 2);
@@ -104,11 +155,12 @@ try {
   });
   await search.fill("project:Study color:Important");
   await visibleRows(2);
-  await rows.first().click();
+  await bodyFocus();
   await explorer.keyboard.press("Control+a");
   assert.equal(await explorer.locator(".item-row.selected").count(), 2);
   await search.focus();
   await explorer.keyboard.press("Control+a");
+  assert.equal(await search.evaluate(el => el.selectionEnd - el.selectionStart), (await search.inputValue()).length);
   await explorer.keyboard.press("Delete");
   await visibleRows(5);
   assert.equal((await read()).conversations.length, 5);
@@ -122,6 +174,9 @@ try {
     6,
   );
   await rename.fill("Alias Zero");
+  await rename.press("Control+a");
+  assert.equal(await rename.evaluate(el => el.selectionEnd - el.selectionStart), 10);
+  assert.equal(await explorer.locator(".item-row.selected").count(), 1);
   await rename.press("Enter");
   await rename.waitFor({ state: "hidden" });
   assert.equal((await read()).conversations[0].title, "Alias Zero");
@@ -148,10 +203,16 @@ try {
     .getByLabel("Project filter", { exact: true })
     .selectOption({ label: "Study" });
   await visibleRows(2);
+  await explorer.getByLabel("Project filter", { exact: true }).focus();
+  await explorer.keyboard.press("Control+a");
+  assert.equal(await explorer.locator(".item-row.selected").count(), 2);
   await explorer
     .getByLabel("Color filter", { exact: true })
     .selectOption("#ffffff");
   await visibleRows(0);
+  await bodyFocus();
+  await explorer.keyboard.press("Control+a");
+  assert.equal(await explorer.locator(".item-row.selected").count(), 0);
   await explorer
     .getByLabel("Project filter", { exact: true })
     .selectOption("none");
@@ -201,6 +262,9 @@ try {
     .filter({ hasText: "Folder One" });
   await folderRow.dblclick();
   await visibleRows(2);
+  await bodyFocus();
+  await explorer.keyboard.press("Control+a");
+  assert.equal(await explorer.locator(".item-row.selected").count(), 2);
   await rows.first().dblclick();
   await chat.waitForURL(/chat-/);
   assert.equal(
@@ -459,7 +523,7 @@ try {
   await explorer.screenshot({ path: ".verification/explorer-ux-dark-500.png" });
   assert.deepEqual(errors, []);
   console.log(
-    "PASS: visible selection/input guards, inline rename save/cancel/blur, double-click open, color click, combined project/color/search, palette/bulk move, theme import/export/reset/persistence, workspace preview/cancel/apply/backup; no page errors.",
+    "PASS: body-focus Ctrl+A without prior selection, Inbox/Folder/Favorites/filtered/empty views, native search/rename/modal input Ctrl+A, visible selection/input guards, inline rename save/cancel/blur, double-click open, color click, combined project/color/search, palette/bulk move, theme import/export/reset/persistence, workspace preview/cancel/apply/backup; no page errors.",
   );
 } finally {
   await context.close();

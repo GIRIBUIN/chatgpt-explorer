@@ -27,8 +27,9 @@ export function selectItems(
     anchor: clicked,
   };
 }
-export const isTextInput = (target: Element) =>
-  !!target.closest('input,textarea,select,[contenteditable="true"]');
+export const isTextInput = (target: Element, includeSelect = true) =>
+  !!target.closest(includeSelect ? 'input,textarea,select' : 'input,textarea') ||
+  (target as HTMLElement).isContentEditable === true;
 export function searchTokens(query: string) {
   return (query.match(/(?:name:|color:|project:)?"[^"]*"|[^\s]+/gi) ?? [])
     .map((raw) => {

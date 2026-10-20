@@ -71,7 +71,7 @@ describe("English presentation", () => {
             id: "f",
             name: "Folder",
             parentId: null,
-            favorite: false,
+            pinned: false,
             createdAt: 0,
           }}
         />,
@@ -143,7 +143,7 @@ describe("tab discovery and import", () => {
   it("imports only new IDs into Inbox and preserves existing folder/alias/color", () => {
     let s = defaults();
     s.folders = [
-      { id: "f", name: "Folder", parentId: null, createdAt: 0, favorite: true },
+      { id: "f", name: "Folder", parentId: null, createdAt: 0, pinned: true },
     ];
     s = addConversation(s, "Keep alias", "https://chatgpt.com/c/a", "f").state;
     s.conversations[0].color = "#123456";

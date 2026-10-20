@@ -2,7 +2,7 @@ import { webext } from "../utils/browser";
 import { t } from "../i18n";
 import { defaults, normalizeState } from "../models/state";
 import type { AppState } from "../models/types";
-import { migrateV1, migrateColorNames } from "../models/migration";
+import { migrateV1, migrateColorNames, migrateFolderPins } from "../models/migration";
 export const STATE_KEY = "explorerState";
 // Chrome storage does not promise object key order. Compare values canonically.
 function canonical(value: unknown): string {
@@ -40,7 +40,8 @@ export async function loadState(): Promise<{
       readOnly: true,
     };
   const v1 = migrateV1(raw);
-  const migrated = migrateColorNames(v1);
+  const colored = migrateColorNames(v1);
+  const migrated = migrateFolderPins(colored);
   const state = normalizeState(migrated);
   if (canonical(migrated) !== canonical(state)) {
     // Preserve the original before any repaired state can be written.
@@ -57,7 +58,7 @@ export async function loadState(): Promise<{
   }
   if (migrated !== raw) {
     const backupKey =
-      v1 !== raw ? "migrationBackupV1" : "migrationBackupColorNames";
+      v1 !== raw ? "migrationBackupV1" : colored !== v1 ? "migrationBackupColorNames" : "migrationBackupFolderPins";
     const backup = await webext().storage.local.get(backupKey);
     if (backup[backupKey] === undefined)
       await webext().storage.local.set({ [backupKey]: raw });

@@ -1,5 +1,14 @@
 export const messages = {
   en: {
+    interfaceScale: 'Interface scale',
+    zoomIn: 'Zoom in',
+    zoomOut: 'Zoom out',
+    folderColor: 'Folder color',
+    movingItem: 'Moving 1 item',
+    movingItems: 'Moving {count} items',
+    pinFolder: 'Pin folder',
+    unpinFolder: 'Unpin folder',
+    resetFolderColor: 'Reset to default',
     dropbox: 'Dropbox',
     dropboxDescription: 'Keep your Explorer workspace synchronized across browsers and devices through your own Dropbox.',
     dropboxDisclosure: 'Sync data is encrypted on this device and stored in /ChatGPT Chat Explorer in your Dropbox. The app has Full Dropbox permission, but its code only uses this dedicated sync folder (plus the old root sync file during migration).',

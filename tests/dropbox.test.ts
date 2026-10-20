@@ -1,9 +1,11 @@
+import { renameItem } from '../src/models/explorer';
 import { it, expect, vi, afterEach } from 'vitest';
 import { dropboxHarness } from './dropbox-harness';
 import { dropboxCredentials, DROPBOX_PATH, DROPBOX_LEGACY_PATH } from '../src/sync/dropbox';
 import { newSyncKey, driveKey, driveCredentials } from '../src/sync/drive-key';
 import { encrypt, decrypt, hash } from '../src/sync/crypto';
 import { payload } from '../src/sync/payload';
+import { moveDraggedItems } from '../src/models/drag';
 import { defaults, addConversation } from '../src/models/state';
 import { SyncClient, type SyncStore, type Local, type Preview } from '../src/sync/client';
 import { AutoSync, type AutoState, IDLE_MS } from '../src/sync/auto';
@@ -269,4 +271,53 @@ it.each([
   const { h, b } = await pair(); b.edit('pending'); await b.auto.changed(); const before = structuredClone(b.local);
   h.auth.token.mockRejectedValueOnce(failure); await b.auto.close();
   expect(b.status().error).toBe(category); expect(b.status().dirty).toBe(true); expect(b.local).toEqual(before);
+});
+
+it('Dropbox preserves independent folder HEX decoration without creating chat labels', async () => {
+  const { a, b } = await pair();
+  const rules = structuredClone(a.local.state.colorRules);
+  a.local.state.folders.push({ id: 'colored-folder', name: 'Folder', parentId: null, pinned: true, createdAt: 1, color: '#123456' });
+  expect(await a.client.now()).toEqual({ kind: 'done' });
+  expect(await b.client.now()).toEqual({ kind: 'done' });
+  expect(b.local.state.folders.find(f => f.id === 'colored-folder')).toMatchObject({ color: '#123456', pinned: true });
+  expect(a.local.state.colorRules).toEqual(rules);
+  expect(b.local.state.colorRules).toEqual(rules);
+  a.local.state.folders[0].pinned = false;
+  await a.client.now(); await b.client.now();
+  expect(b.local.state.folders[0].pinned).toBe(false);
+  expect(b.local.state.folders[0]).not.toHaveProperty('favorite');
+});
+
+it('multi-item drag locations and metadata persist through encrypted Dropbox sync', async () => {
+  const { a, b } = await pair();
+  a.local.state.folders = [
+    { id: 'destination', name: 'Destination', parentId: null, createdAt: 1 },
+    { id: 'dragged-folder', name: 'Folder', parentId: null, pinned: true, color: '#123456', createdAt: 1 },
+    { id: 'child', name: 'Child', parentId: 'dragged-folder', createdAt: 1 },
+  ];
+  a.local.state.conversations[0].favorite = true;
+  a.local.state.conversations[0].originalTitle = 'Original';
+  const before = structuredClone(a.local.state.conversations[0]);
+  a.local.state = moveDraggedItems(a.local.state, [{ kind: 'folder', id: 'dragged-folder' },
+    { kind: 'conversation', id: before.id }], 'destination');
+  await a.client.now(); await b.client.now();
+  expect(b.local.state.folders.find(f => f.id === 'dragged-folder')).toMatchObject({ parentId: 'destination', pinned: true, color: '#123456' });
+  expect(b.local.state.folders.find(f => f.id === 'child')?.parentId).toBe('dragged-folder');
+  expect(b.local.state.conversations[0]).toMatchObject({ folderId: 'destination', favorite: true, originalTitle: 'Original', title: before.title, color: before.color });
+});
+
+it('shared sidebar/main folder rename persists through Dropbox without replacing other metadata', async () => {
+  const { a, b } = await pair();
+  a.local.state.folders = [
+    { id: 'folder', name: 'Before', parentId: null, pinned: true, color: '#123456', createdAt: 1 },
+    { id: 'child', name: 'Child', parentId: 'folder', pinned: false, createdAt: 1 },
+  ];
+  a.local.state.conversations[0].folderId = 'folder';
+  const chat = structuredClone(a.local.state.conversations[0]);
+  await a.client.now(); await b.client.now();
+  a.local.state = renameItem(a.local.state, { kind: 'folder', id: 'folder' }, 'After');
+  await a.client.now(); await b.client.now();
+  expect(b.local.state.folders.find(f => f.id === 'folder')).toMatchObject({ name: 'After', parentId: null, pinned: true, color: '#123456' });
+  expect(b.local.state.folders.find(f => f.id === 'child')?.parentId).toBe('folder');
+  expect(b.local.state.conversations[0]).toMatchObject({ title: chat.title, folderId: 'folder', color: chat.color, favorite: chat.favorite });
 });
