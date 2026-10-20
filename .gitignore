@@ -1,0 +1,23 @@
+node_modules/
+dist/
+.verification/
+coverage/
+*.tsbuildinfo
+tmp/
+.env
+.env.*
+!.env.example
+*.log
+*.bak
+*.tmp
+# Personal exports and credentials (synthetic test fixtures stay tracked).
+/chat-explorer-workspace*.json
+/chat-explorer-sync-local*.json
+/chat-explorer-sync-remote*.json
+/chat-explorer-theme*.json
+/workspace-backup*.json
+/screenshots/
+/browser-profiles/
+/token-dumps/
+sync-server/.wrangler/
+sync-server/.dev.vars

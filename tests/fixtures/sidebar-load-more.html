@@ -1,0 +1,28 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><title>Synthetic sidebar</title>
+<!-- Synthetic fixture derived from observed semantic structure. Not a live ChatGPT DOM capture.
+     Recents load-more is a structural test case; the shell trigger follows the supplied semantic contract. -->
+<button id="toggle" data-app-shell-sidebar-trigger="true" aria-controls="app-shell-sidebar" aria-expanded="false">Toggle navigation</button>
+<aside id="app-shell-sidebar" hidden>
+<div data-app-action-sidebar-scroll style="height:180px;overflow:auto">
+<section data-app-action-sidebar-section-heading="Projects">
+<div role="list"><div role="listitem" data-sidebar-project-container-id="project:g-p-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa">
+<div role="button" tabindex="0" data-app-action-sidebar-project-row data-app-action-sidebar-project-id="g-p-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" data-app-action-sidebar-project-label="Project A" data-app-action-sidebar-project-collapsed="true" aria-expanded="false">Project A</div>
+<div id="project-content" inert hidden role="list"><a data-interactive-row-link="true" aria-label="Project chat" href="/g/g-p-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/c/project-chat">Project chat</a></div>
+</div></div></section>
+<section data-app-action-sidebar-section-heading="Recents"><div role="list" data-sidebar-project-container-id="chats" id="chat-list"></div></section>
+</div></aside>
+<script>
+const region=document.getElementById('app-shell-sidebar'), toggle=document.getElementById('toggle');
+const content=region.firstElementChild;window.fixtureSidebarContent=content;window.fixtureBootId=Math.random();
+toggle.onclick=()=>{region.hidden=!region.hidden;if(region.hidden)content.remove();else region.append(content);toggle.setAttribute('aria-expanded',String(!region.hidden));};
+const row=document.querySelector('[data-app-action-sidebar-project-row]'), children=document.getElementById('project-content');
+row.onclick=()=>{const closed=row.getAttribute('aria-expanded')==='true';row.setAttribute('aria-expanded',String(!closed));row.setAttribute('data-app-action-sidebar-project-collapsed',String(closed));children.hidden=closed;children.inert=closed;};
+const list=document.getElementById('chat-list');
+let count=0;window.loadMoreClicks=0;window.scrollEvents=0;
+document.querySelector('[data-app-action-sidebar-scroll]').addEventListener('scroll',()=>window.scrollEvents++);
+function add(n){for(let i=0;i<n;i++){const item=document.createElement('div');item.setAttribute('role','listitem');item.style.height='45px';item.innerHTML='<a data-interactive-row-link="true" aria-label="General '+count+'" href="/c/batch-'+count+'">General '+count+'</a>';count++;list.append(item);}}
+function more(){if(window.loadMoreClicks>=2)return;const item=document.createElement('div');item.setAttribute('role','listitem');item.innerHTML='<button type="button">Show more</button>';list.append(item);item.firstChild.onclick=()=>{window.loadMoreClicks++;item.innerHTML='<div role="status">Loading chats</div>';setTimeout(()=>{item.remove();add(3);more();},location.search.includes('slow')?10000:300);};}
+add(2);more();content.remove();
+// Synthetic app router only: the extension must never call pushState itself.
+document.addEventListener('click',event=>{const link=event.target.closest('a[data-interactive-row-link="true"]');if(link){event.preventDefault();history.pushState({},'',link.href);}});
+</script></html>

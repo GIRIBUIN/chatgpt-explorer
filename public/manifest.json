@@ -1,0 +1,36 @@
+{
+  "manifest_version": 3,
+  "name": "ChatGPT Chat Explorer",
+  "version": "0.1.0",
+  "description": "Organize ChatGPT conversations in a local desktop-style explorer",
+  "minimum_chrome_version": "120",
+  "permissions": [
+    "storage",
+    "tabs",
+    "system.display",
+    "scripting",
+    "alarms"
+  ],
+  "host_permissions": [
+    "https://chatgpt.com/*"
+  ],
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "action": {
+    "default_title": "Open Chat Explorer"
+  },
+  "commands": {
+    "open-explorer": {
+      "suggested_key": {
+        "default": "Ctrl+Shift+E",
+        "mac": "Command+Shift+E"
+      },
+      "description": "Open or focus Chat Explorer"
+    }
+  },
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'self'"
+  }
+}

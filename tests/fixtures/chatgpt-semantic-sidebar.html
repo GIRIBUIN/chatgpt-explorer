@@ -1,0 +1,31 @@
+<!doctype html>
+<!-- Synthetic semantic fixture based on user-provided attributes, NOT a live DOM capture. -->
+<html lang="ko"><head><meta charset="utf-8"><title>Semantic sidebar fixture</title>
+<style>[data-app-action-sidebar-scroll]{height:180px;width:260px;overflow-y:auto}#history{height:1600px;position:relative}.virtual{position:absolute;height:160px}[role=button]{height:30px}a{display:block}</style>
+</head><body>
+<aside><div data-app-action-sidebar-scroll>
+<section data-app-action-sidebar-section-heading="Projects"><h2>프로젝트</h2>
+<div data-sidebar-project-container-id="project:g-p-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa">
+<div role="button" tabindex="0" data-app-action-sidebar-project-row data-app-action-sidebar-project-id="g-p-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" data-app-action-sidebar-project-label="Local ai" data-app-action-sidebar-project-collapsed="true" aria-expanded="false">Local ai</div>
+<div class="children" inert aria-hidden="true"><a data-interactive-row-link="true" href="/g/g-p-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/c/semantic-a" aria-label="Project A title">Menu noise</a></div>
+</div>
+<div data-sidebar-project-container-id="project:g-p-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb">
+<div role="button" tabindex="0" data-app-action-sidebar-project-row data-app-action-sidebar-project-id="g-p-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" data-app-action-sidebar-project-label="매일" data-app-action-sidebar-project-collapsed="false" aria-expanded="true">매일</div>
+<div class="children"><a data-interactive-row-link="true" href="/g/g-p-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb/c/semantic-b"><span data-thread-title>Project B title</span>Menu noise</a><a data-interactive-row-link="true" href="/g/g-p-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/c/wrong-project" aria-label="Must reject">Bad relation</a></div>
+</div></section>
+<div id="history"></div></div></aside><main>Original main content stays unchanged.</main>
+<script>
+for (const row of document.querySelectorAll('[data-app-action-sidebar-project-row]')) row.addEventListener('click', () => {
+  const closed = row.getAttribute('aria-expanded') === 'false';
+  row.setAttribute('aria-expanded', String(closed)); row.setAttribute('data-app-action-sidebar-project-collapsed', String(!closed));
+  const child = row.nextElementSibling; child.inert = !closed; child.setAttribute('aria-hidden', String(!closed));
+});
+const scroller = document.querySelector('[data-app-action-sidebar-scroll]'), history = document.querySelector('#history');
+function render() {
+  const index = Math.max(0, Math.min(9, Math.floor((scroller.scrollTop - history.offsetTop)/160)));
+  // Render the intersecting row plus its neighbor. At the bottom the viewport
+  // spans rows 8 and 9; rendering only row 8 made the last chat unreachable.
+  history.innerHTML = [index, index + 1].filter(i => i <= 9).map(i => `<a class="virtual" style="top:${i*160}px" data-interactive-row-link="true" href="/c/semantic-${i}" aria-label="General ${i}">Unwanted surrounding text</a>`).join('');
+}
+scroller.addEventListener('scroll', () => setTimeout(render, 60)); render();
+</script></body></html>
