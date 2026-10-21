@@ -1,9 +1,17 @@
+<img src="assets/icons/icon-128.png" alt="Convoary icon" width="80" height="80" />
+
 # Convoary
 
 Organize, search, and manage your AI conversations.
 Currently supports ChatGPT conversations in a separate Explorer-style window.
 An independent **v0.1 alpha** extension for Chrome, Edge, Firefox and Zen.
 Not affiliated with or endorsed by OpenAI.
+
+## Demo
+
+[![Watch the Convoary demo](assets/icons/yt.png)](https://youtu.be/8-YvxsedAxQ)
+
+[Watch on YouTube](https://youtu.be/8-YvxsedAxQ)
 
 ## Features
 

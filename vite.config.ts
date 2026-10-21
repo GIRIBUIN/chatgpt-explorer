@@ -17,9 +17,6 @@ export default defineConfig(({ mode }) => {
     plugins: [
       {
         name: "browser-manifest",
-        transformIndexHtml() {
-          return [{ tag: "link", attrs: { rel: "icon", type: "image/png", href: "./icons/icon-32.png" }, injectTo: "head" }];
-        },
         generateBundle() {
           for (const size of [16, 32, 48, 128]) {
             this.emitFile({
