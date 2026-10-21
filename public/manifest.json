@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "Chat Explorer for ChatGPT",
+  "name": "Convoary",
   "version": "0.1.0",
-  "description": "Organize ChatGPT conversations in a local desktop-style explorer",
+  "description": "Organize, search, and manage your AI conversations.",
   "minimum_chrome_version": "120",
   "permissions": [
     "storage",
@@ -25,7 +25,7 @@
     "128": "icons/icon-128.png"
   },
   "action": {
-    "default_title": "Open Chat Explorer for ChatGPT",
+    "default_title": "Open Convoary",
     "default_icon": {
       "16": "icons/icon-16.png",
       "32": "icons/icon-32.png"
@@ -37,7 +37,7 @@
         "default": "Ctrl+Shift+E",
         "mac": "Command+Shift+E"
       },
-      "description": "Open or focus Chat Explorer for ChatGPT"
+      "description": "Open or focus Convoary"
     }
   },
   "content_security_policy": {

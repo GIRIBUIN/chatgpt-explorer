@@ -1,10 +1,10 @@
-# Privacy — v0.1-alpha
+# Convoary Privacy — v0.1-alpha
 
 This describes the default Dropbox build's behavior, not a legal policy or a guarantee about third-party services.
 
 ## Local data
 
-Extension `storage.local` holds chat IDs/URLs, known titles and aliases, virtual folders, favorites, colors/names, Project metadata, theme/preferences and local workspace backups. Device-specific window state and transient UI/import state stay local. ChatGPT message bodies are not stored or synced. Explorer rename/move/remove does not change source conversations.
+Extension `storage.local` holds chat IDs/URLs, known titles and aliases, virtual folders, favorites, colors/names, Project metadata, theme/preferences and local workspace backups. Device-specific window state and transient UI/import state stay local. ChatGPT message bodies are not stored or synced. Convoary rename/move/remove does not change source conversations.
 
 The extension accesses ChatGPT pages through ordinary URLs and semantic DOM. It does not read ChatGPT cookies/auth tokens or use private ChatGPT APIs.
 
@@ -22,6 +22,6 @@ Lost-key reset is a separate destructive action, never automatic: after explicit
 
 ## Other transfers and exports
 
-The default build has no central Chat Explorer sync server, analytics, telemetry or data-sale/collection endpoint. Dropbox receives the requests required for OAuth and sync. Opening chats loads ChatGPT normally. Legacy provider code is retained for explicit old configurations.
+The default build has no central Convoary sync server, analytics, telemetry or data-sale/collection endpoint. Dropbox receives the requests required for OAuth and sync. Opening chats loads ChatGPT normally. Legacy provider code is retained for explicit old configurations.
 
 Workspace exports, conflict exports and exported local backups contain **plaintext metadata**. Theme exports contain appearance settings. They do not include conversation content or sync credentials. Users choose where to store/share those files. Local browser profiles are not a protected secret vault: anyone controlling the profile/device may access credentials, plaintext metadata and keys.

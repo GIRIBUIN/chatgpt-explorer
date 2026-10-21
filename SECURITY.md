@@ -1,4 +1,4 @@
-# Security — v0.1-alpha
+# Convoary Security — v0.1-alpha
 
 ## Reporting a vulnerability
 
@@ -6,7 +6,7 @@ Do not put tokens, Sync Keys, personal workspaces or exploitable details in a pu
 
 ## Model and limitations
 
-- The default provider is each user's own Dropbox. There is no required Chat Explorer sync backend.
+- The default provider is each user's own Dropbox. There is no required Convoary sync backend.
 - Dropbox OAuth uses authorization code + PKCE S256, random verifier/state and exact redirect validation. No client/app secret is bundled. The app key is public; it is not an OAuth token.
 - Access/refresh tokens stay in extension local storage. Background token refresh is silent; only explicit Connect/Reconnect opens authorization. A failed request keeps local data/dirty state, without aggressive retries.
 - Workspace snapshots use Web Crypto AES-GCM-256, a fresh random 12-byte IV and stable AAD. Tokens and Sync Key are excluded from remote payloads and Workspace/Theme exports.

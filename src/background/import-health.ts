@@ -138,7 +138,7 @@ export async function ensureImportContent(
   try {
     return await ping();
   } catch (firstError) {
-    if (import.meta.env.DEV) console.debug("[Chat Explorer import] initial ping", String(firstError));
+    if (import.meta.env.DEV) console.debug("[Convoary import] initial ping", String(firstError));
     try {
       stage = "injection";
       if (!webext().scripting?.executeScript)

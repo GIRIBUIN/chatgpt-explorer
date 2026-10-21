@@ -125,7 +125,7 @@ export function openExplorer() {
 }
 const launch = () => {
   void openExplorer().catch((error) =>
-    console.error("Explorer window:", error),
+    console.error("Convoary window:", error),
   );
 };
 webext().action.onClicked.addListener(launch);

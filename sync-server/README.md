@@ -1,4 +1,4 @@
-# Legacy Cloudflare sync server
+# Convoary — legacy Cloudflare sync server
 
 Retained for compatibility and regression tests. The default Dropbox extension does **not** use this server, and no production endpoint is assumed active. Current sync instructions: [Dropbox](../docs/SYNC.md).
 

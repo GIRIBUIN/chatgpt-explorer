@@ -474,9 +474,9 @@ export function SyncSettings({
                   onClick={() =>
                     void run(async () => {
                       const both = await client.current!.exportBoth(preview);
-                      downloadJson("chat-explorer-sync-local.json", both.local);
+                      downloadJson("convoary-sync-local.json", both.local);
                       downloadJson(
-                        "chat-explorer-sync-remote.json",
+                        "convoary-sync-remote.json",
                         both.remote,
                       );
                       return preview;

@@ -381,7 +381,7 @@ try {
     .click();
   assert.equal(
     (await downloadTheme).suggestedFilename(),
-    "chat-explorer-theme.json",
+    "convoary-theme.json",
   );
   await data
     .getByLabel("Import Theme JSON", { exact: true })
@@ -393,7 +393,7 @@ try {
     .getByRole("button", { name: "Export Workspace JSON", exact: true })
     .click();
   const file = await download;
-  assert.equal(file.suggestedFilename(), "chat-explorer-workspace.json");
+  assert.equal(file.suggestedFilename(), "convoary-workspace.json");
   const workspace = JSON.parse(await fs.readFile(await file.path(), "utf8"));
   assert(!JSON.stringify(workspace).includes("messages"));
   workspace.chats[0].displayName = "Workspace Alias";
@@ -514,7 +514,7 @@ try {
     .click();
   assert.equal(
     (await backupDownload).suggestedFilename(),
-    "chat-explorer-workspace-backup.json",
+    "convoary-workspace-backup.json",
   );
   await data.getByRole("button", { name: "Close", exact: true }).click();
   await explorer.setViewportSize({ width: 500, height: 650 });

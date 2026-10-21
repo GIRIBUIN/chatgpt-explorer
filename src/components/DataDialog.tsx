@@ -109,7 +109,7 @@ export function DataDialog({
             aria-label={t("exportTheme")}
             onClick={() =>
               downloadJson(
-                "chat-explorer-theme.json",
+                "convoary-theme.json",
                 state.theme ??
                   systemTheme(
                     window.matchMedia("(prefers-color-scheme: dark)").matches,
@@ -177,7 +177,7 @@ export function DataDialog({
             aria-label={t("exportWorkspace")}
             onClick={() =>
               downloadJson(
-                "chat-explorer-workspace.json",
+                "convoary-workspace.json",
                 exportWorkspace(state),
               )
             }
@@ -201,7 +201,7 @@ export function DataDialog({
                     { state?: AppState } | undefined;
                   if (backup?.state)
                     downloadJson(
-                      "chat-explorer-workspace-backup.json",
+                      "convoary-workspace-backup.json",
                       exportWorkspace(backup.state),
                     );
                   else setError(t("noBackup"));

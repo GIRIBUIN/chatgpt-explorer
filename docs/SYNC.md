@@ -1,6 +1,6 @@
 # Dropbox sync
 
-Chat Explorer uses each user's own Dropbox account. A public app key identifies the application; data does not go to the developer's Dropbox. No sync backend or client secret is required.
+Convoary uses each user's own Dropbox account. A public app key identifies the application; data does not go to the developer's Dropbox. No sync backend or client secret is required.
 
 ## Build configuration
 
@@ -45,6 +45,8 @@ The OAuth grant allows **Full Dropbox access**. Application code only operates o
 /ChatGPT Chat Explorer/chat-explorer-sync.json
 ```
 
+The folder/file names, encryption identifiers and extension IDs retain their original values for compatibility with existing installations. The Convoary rename does not move or re-encrypt existing sync data.
+
 It does not list or browse unrelated Dropbox files. This restriction is in code, not a service-enforced sandbox. The one legacy exception is `/chat-explorer-sync.json`, described below.
 
 Workspace metadata, theme and selected preferences are encrypted on-device with AES-GCM-256. Conversation bodies, ChatGPT credentials, OAuth tokens, Sync Key, backups, window geometry and transient UI state are excluded. Dropbox can see envelope version/revision/timestamp, IV, ciphertext size and request timing. Exported workspace/backup JSON is plaintext metadata. See [Privacy](../PRIVACY.md) and [Security](../SECURITY.md).
@@ -52,7 +54,7 @@ Workspace metadata, theme and selected preferences are encrypted on-device with 
 ## Automatic sync and safety
 
 - Local changes save immediately.
-- Automatic sync runs once on Explorer startup, five minutes after the last durable edit, and best effort on dirty Explorer close. Auto Sync Off disables these attempts. Sync now remains available.
+- Automatic sync runs once on Convoary startup, five minutes after the last durable edit, and best effort on dirty Convoary close. Auto Sync Off disables these attempts. Sync now remains available.
 - There is no polling or focus sync. Browser termination can interrupt close sync; subsequent startup/manual sync handles durable pending changes.
 - Tokens refresh silently. Only explicit Connect/Reconnect opens OAuth. Network/auth failures preserve local data and pending changes; reconnect explicitly if required.
 - Dropbox revision-conditional writes prevent stale overwrite. Pulls validate data, recheck local/remote state and save a backup before apply. True conflicts require a choice; equal semantic data does not conflict.

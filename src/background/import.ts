@@ -145,10 +145,10 @@ async function performScan(session: Session) {
       }
       if (!health.ok) {
         failureReason = health.reason ?? "message-failed";
-        console.warn("[Chat Explorer import] bootstrap", health.diagnostic);
+        console.warn("[Convoary import] bootstrap", health.diagnostic);
         throw Error(health.reason);
       }
-      if (import.meta.env.DEV) console.debug("[Chat Explorer import] health", {
+      if (import.meta.env.DEV) console.debug("[Convoary import] health", {
         hasSidebar: health.hasSidebar,
         visibleConversationCount: health.visibleConversationCount,
       });
@@ -207,12 +207,12 @@ async function performScan(session: Session) {
         );
         const page = results[0]?.result;
         if (!page || page.url !== url) throw Error("Page changed");
-        if (import.meta.env.DEV) console.debug("[Chat Explorer import] read", {
+        if (import.meta.env.DEV) console.debug("[Convoary import] read", {
           links: page.links.length,
           projects: page.projects?.length ?? 0,
         });
         if (page.links.length <= 1 && health.visibleConversationCount > 1)
-          console.warn("[Chat Explorer import] parser-count-mismatch", {
+          console.warn("[Convoary import] parser-count-mismatch", {
             expected: health.visibleConversationCount,
             actual: page.links.length,
           });
@@ -275,7 +275,7 @@ async function performScan(session: Session) {
                 } catch (error) {
                   if (!signal.aborted) {
                     failedPages++;
-                    console.warn("[Chat Explorer import] project", error);
+                    console.warn("[Convoary import] project", error);
                   }
                 } finally {
                   try {
@@ -309,7 +309,7 @@ async function performScan(session: Session) {
         );
         if (result.failed) {
           failedPages++;
-          console.warn("[Chat Explorer import] traversal", result.failure);
+          console.warn("[Convoary import] traversal", result.failure);
         }
         if (result.limited) limitedPages++;
       } finally {
@@ -334,7 +334,7 @@ async function performScan(session: Session) {
         error instanceof Error && error.message === "Page changed"
           ? "tab-navigated"
           : "traversal-failed";
-      console.warn("[Chat Explorer import]", failureReason, error);
+      console.warn("[Convoary import]", failureReason, error);
     }
   }
   if (restoreSidebar) {
@@ -343,7 +343,7 @@ async function performScan(session: Session) {
     } catch (error) {
       failedPages++;
       failureReason ??= "sidebar-restore-failed";
-      console.warn("[Chat Explorer import] sidebar restore", error);
+      console.warn("[Convoary import] sidebar restore", error);
     }
   }
   const items = [...candidates.values()].flat();

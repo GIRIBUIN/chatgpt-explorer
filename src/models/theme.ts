@@ -16,7 +16,7 @@ export type Theme = {
 };
 export const defaultTheme: Theme = {
   version: 1,
-  name: "Explorer Light",
+  name: "Convoary Light",
   colors: {
     background: "#ffffff",
     surface: "#f7f8fa",
@@ -101,7 +101,7 @@ export function systemTheme(dark: boolean): Theme {
   return dark
     ? {
         ...defaultTheme,
-        name: "Explorer Dark",
+        name: "Convoary Dark",
         colors: {
           background: "#202124",
           surface: "#26272b",

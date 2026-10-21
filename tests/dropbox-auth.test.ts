@@ -142,7 +142,7 @@ it('disconnected failure copy says Connect rather than unavailable Reconnect/Syn
 });
 it('Sync settings accurately disclose Full Dropbox permission and separate Sync Key protection', () => {
   expect(t('dropboxDisclosure')).toContain('Full Dropbox');
-  expect(t('dropboxDisclosure')).toContain('/ChatGPT Chat Explorer');
+  expect(t('dropboxDisclosure')).toContain('dedicated sync folder');
   expect(t('dropboxDisclosure')).not.toContain('App Folder');
   expect(t('syncKeyWarning')).toContain('not stored in Dropbox');
   expect(t('syncKeyWarning')).toContain('lose it');

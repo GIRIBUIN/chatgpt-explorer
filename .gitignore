@@ -12,6 +12,10 @@ tmp/
 *.bak
 *.tmp
 # Personal exports and credentials (synthetic test fixtures stay tracked).
+/convoary-workspace*.json
+/convoary-sync-local*.json
+/convoary-sync-remote*.json
+/convoary-theme*.json
 /chat-explorer-workspace*.json
 /chat-explorer-sync-local*.json
 /chat-explorer-sync-remote*.json

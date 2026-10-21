@@ -6,6 +6,10 @@ import { readFileSync } from "node:fs";
 
 it.each(["chromium", "firefox"] as const)("uses supplied PNG icons in the %s manifest", (target) => {
   const manifest = manifestFor(target);
+  expect(manifest.name).toBe("Convoary");
+  expect(manifest.description).toBe("Organize, search, and manage your AI conversations.");
+  expect(manifest.action.default_title).toBe("Open Convoary");
+  expect(manifest.commands["open-explorer"].description).toBe("Open or focus Convoary");
   for (const [size, path] of Object.entries(manifest.icons)) {
     const png = readFileSync(new URL(`../assets/${path}`, import.meta.url));
     expect(Array.from(png.slice(0, 8))).toEqual([137, 80, 78, 71, 13, 10, 26, 10]);

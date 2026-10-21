@@ -1,6 +1,7 @@
-# Chat Explorer for ChatGPT
+# Convoary
 
-Organize your ChatGPT conversations in a separate Explorer-style window.
+Organize, search, and manage your AI conversations.
+Currently supports ChatGPT conversations in a separate Explorer-style window.
 An independent **v0.1 alpha** extension for Chrome, Edge, Firefox and Zen.
 Not affiliated with or endorsed by OpenAI.
 
@@ -8,26 +9,26 @@ Not affiliated with or endorsed by OpenAI.
 
 - Nested folders, favorites, colors, search and filters.
 - Multi-selection, drag and drop, inline rename and keyboard shortcuts.
-- Import chats from ChatGPT's visible sidebar, current chat or open tabs.
+- Import chats from the visible sidebar, current chat or open tabs.
 - Theme and workspace JSON import/export, with local backups.
 - Optional encrypted Dropbox sync across browsers and devices.
 
-Your organization stays local unless you enable sync. Source ChatGPT conversations are never modified. Sidebar import depends on ChatGPT's interface and may not find every conversation.
+Your organization stays local unless you enable sync. Source conversations are never modified. Sidebar import depends on the source website's interface and may not find every conversation.
 
 ## Install
 
-Download the ZIP for your browser from [Releases](https://github.com/GIRIBUIN/chat-explorer-for-chatgpt/releases) and extract it.
+Download the ZIP for your browser from [Releases](https://github.com/GIRIBUIN/convoary/releases) and extract it.
 
 - **Chrome / Edge:** open the extensions page, enable Developer mode, choose **Load unpacked**, and select the extracted folder.
 - **Firefox / Zen (140+):** open `about:debugging#/runtime/this-firefox`, choose **Load Temporary Add-on**, and select the extracted `manifest.json`. This unsigned alpha installation lasts until the browser restarts.
 
-Click the extension icon to open Explorer.
+Click the extension icon to open Convoary.
 
 Updating an unpacked installation? Back up your Workspace and Sync Key, replace files in the same installation folder, and reload the extension. Avoid removing/reinstalling it or changing its load path.
 
 ## Dropbox sync
 
-Connect your own Dropbox account in Settings. Sync data is encrypted on-device and stored in `/ChatGPT Chat Explorer/chat-explorer-sync.json`.
+Connect your own Dropbox account in Settings. Sync data is encrypted on-device and stored in your dedicated Dropbox sync folder. The existing folder path is retained for compatibility; see [sync setup](docs/SYNC.md).
 
 **The app requests Full Dropbox access**, but its code only uses the dedicated sync file and an old root file for migration. This is a code restriction, not a Dropbox-enforced sandbox.
 
