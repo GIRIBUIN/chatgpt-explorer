@@ -5,6 +5,8 @@ import { SYNC_KEY } from './types';
 import { canonical } from './crypto';
 import { stateLock } from './locks';
 import type { SyncStore } from './client';
+import { DROPBOX_LOCAL_KEY, localDropboxKey } from './dropbox-key';
+import { driveKey } from './drive-key';
 
 async function readLocal(tolerateInvalidCredentials = false) {
     const loaded = await loadState();
@@ -31,6 +33,11 @@ export const extensionSyncStore: SyncStore = {
       const writes: Record<string, unknown> = {};
       if (change.state) writes.explorerState = change.state;
       if (change.sync) writes[SYNC_KEY] = change.sync;
+      // Migrate existing connections before removing their only copy of the key.
+      const retained = change.sync?.provider === 'dropbox' ? change.sync
+        : change.sync === null && before.sync?.provider === 'dropbox' ? before.sync : null;
+      const retainedKey = retained ? driveKey(retained) : change.sync === null ? await localDropboxKey() : null;
+      if (retainedKey) writes[DROPBOX_LOCAL_KEY] = retainedKey;
       if (Object.keys(writes).length) await webext().storage.local.set(writes);
       if (change.sync === null) await webext().storage.local.remove(SYNC_KEY);
     });

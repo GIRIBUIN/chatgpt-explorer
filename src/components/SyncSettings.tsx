@@ -11,10 +11,13 @@ import { providerFor, googleClientId, legacyDefault, dropboxDefault, dropboxClie
 import { GoogleDriveProvider, driveSyncMessage } from '../sync/google-drive';
 import { connectGoogle, disconnectGoogle, DRIVE_PENDING_KEY } from '../sync/google-auth';
 import { driveCredentials, driveKey, newSyncKey } from '../sync/drive-key';
-import { DropboxAuth, DROPBOX_PENDING_KEY, dropboxMessage } from '../sync/dropbox-auth';
-import { DropboxProvider, dropboxCredentials } from '../sync/dropbox';
+import { DropboxAuth, DROPBOX_PENDING_KEY, DROPBOX_TOKEN_KEY, dropboxMessage } from '../sync/dropbox-auth';
+import { DropboxProvider } from '../sync/dropbox';
+import { authenticateDropbox, connectDropboxWorkspace, type DropboxConnectionOutcome } from '../sync/dropbox-connection';
+import { localDropboxKey } from '../sync/dropbox-key';
+import { prepareDropboxReset, resetDropboxWorkspace, type DropboxResetPreview } from '../sync/dropbox-recovery';
 import { SyncError } from '../sync/api';
-import { syncCode, hash } from "../sync/crypto";
+import { syncCode } from "../sync/crypto";
 import { syncDiff } from "../sync/payload";
 import { storedSync, syncConsent } from "../sync/storage";
 import type { SyncState } from "../sync/types";
@@ -48,6 +51,16 @@ export function SyncSettings({
     [shown, setShown] = useState(false),
     [connecting, setConnecting] = useState(false),
     [preview, setPreview] = useState<Preview | null>(autoPreview);
+  const [dropboxAuthorized, setDropboxAuthorized] = useState(false);
+  const [retainedKey, setRetainedKey] = useState<string | null>(null);
+  const [keyIssue, setKeyIssue] = useState<'required' | 'incorrect' | null>(null);
+  const [resetPreview, setResetPreview] = useState<DropboxResetPreview | null>(null);
+  const [resetConfirmed, setResetConfirmed] = useState(false);
+  async function refreshDropboxLocal() {
+    const data = await webext().storage.local.get(DROPBOX_TOKEN_KEY);
+    setDropboxAuthorized(!!data[DROPBOX_TOKEN_KEY]);
+    setRetainedKey(await localDropboxKey());
+  }
   const [automatic, setAutomatic] = useState<AutoState>(autoDefaults);
   useEffect(() => { setPreview(autoPreview); }, [autoPreview]);
   useEffect(() => {
@@ -60,6 +73,7 @@ export function SyncSettings({
     return () => webext().storage.onChanged.removeListener(listener);
   }, []);
   useEffect(() => {
+    void refreshDropboxLocal();
     void storedSync()
       .then(c => {
         setConnection(c);
@@ -98,6 +112,10 @@ export function SyncSettings({
       setMessage(dropbox && !connection && e instanceof SyncError && e.status === 409 ? t('dropboxConnectChanged')
         : dropbox ? dropboxMessage(e, !!connection) : drive ? driveSyncMessage(e, !!connection) : e instanceof Error ? e.message : t("syncFailed"));
     } finally {
+      // OAuth may succeed while a remote read fails; show the actual saved connection.
+      const saved = await storedSync().catch(() => null);
+      setConnection(saved);
+      await refreshDropboxLocal();
       setBusy(false);
       onBusy(false);
     }
@@ -107,21 +125,33 @@ export function SyncSettings({
   const drive = connection ? connection.provider === 'google-drive' : !dropbox && !legacyDefault();
   const keyed = drive || dropbox;
   const configured = dropbox ? !!dropboxClientId() : drive ? !!googleClientId() : !!__SYNC_ORIGIN__;
-  async function connectDropbox() {
+  function dropboxResult(result: DropboxConnectionOutcome): Outcome | void {
+    if (result.kind !== 'key-required') return result;
+    keyRequested.current = true;
+    setConnecting(true);
+    setKeyIssue(result.mismatch ? 'incorrect' : 'required');
+    setResetPreview(null);
+    setResetConfirmed(false);
+    setShown(false);
+    setCode('');
+    setMessage(result.mismatch ? t('dropboxKeyMismatch') : '');
+  }
+  async function connectDropbox(changeAccount = false) {
     const auth = new DropboxAuth(dropboxClientId());
-    await auth.connect();
-    const provider = new DropboxProvider(auth);
+    await authenticateDropbox(auth, store, changeAccount);
+    clearAutoPreview(); setPreview(null); setResetPreview(null); setKeyIssue(null);
+    return connectAuthorizedWorkspace(new DropboxProvider(auth));
+  }
+  async function connectAuthorizedWorkspace(provider = DropboxProvider.configured(dropboxClientId())) {
     client.current = new SyncClient(provider, store);
-    if (connection) return client.current.now();
-    const remote = await provider.readRemote();
-    const pending = (await webext().storage.local.get(DROPBOX_PENDING_KEY))[DROPBOX_PENDING_KEY];
-    if (remote) {
-      keyRequested.current = true; setConnecting(true); setMessage(t('driveKeyRequired'));
-      setCode(typeof pending === 'string' ? pending : ''); return;
-    }
-    const key = typeof pending === 'string' ? pending : newSyncKey();
-    await webext().storage.local.set({ [DROPBOX_PENDING_KEY]: key });
-    return client.current.connectProvider(await dropboxCredentials(key), null);
+    return dropboxResult(await connectDropboxWorkspace(provider, store));
+  }
+  async function disconnectProvider() {
+    if (dropbox) await client.current!.disconnect();
+    else await store.transaction(async () => ({ sync: null }));
+    if (drive) await disconnectGoogle();
+    client.current = new SyncClient(providerFor(), store);
+    clearAutoPreview(); setPreview(null); setResetPreview(null); setKeyIssue(null); setResetConfirmed(false);
   }
   async function connectDrive() {
     await connectGoogle(googleClientId());
@@ -148,6 +178,9 @@ export function SyncSettings({
     await webext().storage.local.remove(DRIVE_PENDING_KEY);
     return result;
   }
+  const savedKeyOnly = dropbox && !connection;
+  const visibleDropboxKey = dropbox ? connection ? driveKey(connection) : retainedKey : null;
+  const canReset = state.folders.length > 0 || state.conversations.length > 0;
   return (
     <section className="data-settings" aria-busy={busy}>
       <h3>{t("sync")}</h3>
@@ -161,6 +194,7 @@ export function SyncSettings({
         ) : (
           <small>{dropbox ? t('dropbox') : drive ? t('googleDrive') : __SYNC_ORIGIN__}</small>
         )}
+        {dropbox && !connection && <span>{t(dropboxAuthorized ? 'dropboxAuthorized' : 'syncDisconnected')}</span>}
         {connection ? (
           <>
             <span>{t("syncConnected")}</span>
@@ -190,7 +224,7 @@ export function SyncSettings({
             </span>
             <div className="dialog-actions settings-actions">
               {keyed && <button type="button" disabled={busy || !configured}
-                onClick={() => void run(dropbox ? connectDropbox : connectDrive)}>{t(dropbox ? 'reconnectDropbox' : 'reconnectDrive')}</button>}
+                onClick={() => void run(dropbox ? () => connectDropbox() : connectDrive)}>{t(dropbox ? 'reconnectDropbox' : 'reconnectDrive')}</button>}
               <button
                 type="button"
                 disabled={busy || !client.current}
@@ -198,25 +232,22 @@ export function SyncSettings({
               >
                 {t("syncNow")}
               </button>
-              <button
+              {!dropbox && <button
                 type="button"
                 disabled={busy}
                 aria-expanded={shown}
                 onClick={() => setShown(!shown)}
               >
                 {t(keyed ? 'showSyncKey' : "showSyncCode")}
-              </button>
+              </button>}
+              {dropbox && <button type="button" disabled={busy || !configured}
+                onClick={() => void run(() => connectDropbox(true))}>{t('changeDropboxAccount')}</button>}
               <button
                 type="button"
                 disabled={busy}
                 onClick={() =>
                   void run(
-                    async () => {
-                      await store.transaction(async () => ({ sync: null }));
-                      if (dropbox) await new DropboxAuth(dropboxClientId()).disconnect();
-                      else if (drive) await disconnectGoogle();
-                      client.current = new SyncClient(providerFor(), store);
-                    },
+                    disconnectProvider,
                     false,
                   )
                 }
@@ -225,10 +256,19 @@ export function SyncSettings({
               </button>
             </div>
           </>
+        ) : dropbox && dropboxAuthorized ? (
+          <div className="dialog-actions settings-actions">
+            <button type="button" disabled={!ready || busy || !client.current}
+              onClick={() => void run(disconnectProvider, false)}>{t('disconnectDropbox')}</button>
+            <button type="button" disabled={!ready || busy || !configured}
+              onClick={() => void run(() => connectDropbox(true))}>{t('changeDropboxAccount')}</button>
+            {!connecting && !preview && <button type="button" disabled={!ready || busy || !configured}
+              onClick={() => void run(() => connectAuthorizedWorkspace())}>{t('continueWorkspaceConnection')}</button>}
+          </div>
         ) : (
           <div className="dialog-actions settings-actions">
             {keyed ? <button type="button" disabled={!ready || busy || !configured}
-              onClick={() => void run(dropbox ? connectDropbox : connectDrive)}>{t(dropbox ? 'connectDropbox' : 'connectDrive')}</button> : <>
+              onClick={() => void run(dropbox ? () => connectDropbox() : connectDrive)}>{t(dropbox ? 'connectDropbox' : 'connectDrive')}</button> : <>
             <button
               type="button"
               disabled={!ready || busy || !client.current}
@@ -247,6 +287,8 @@ export function SyncSettings({
               {t("connectExisting")}
             </button>
             </>}
+            {dropbox && <button type="button" disabled={!ready || busy || !configured}
+              onClick={() => void run(() => connectDropbox(true))}>{t('connectAnotherDropboxAccount')}</button>}
           </div>
         )}
         {invalid && (
@@ -270,11 +312,19 @@ export function SyncSettings({
         )}
         {connecting && (
           <>
+            {dropbox && <>
+              <h4>{t('existingSyncedWorkspace')}</h4>
+              <p className="hint">{t('existingWorkspaceHelp')}</p>
+              {!retainedKey && <p className="hint">{t('noSavedSyncKey')}</p>}
+            </>}
             <label>
               <span className="icon-label"><UiIcon name="key" />{t(keyed ? 'syncKey' : "syncCode")}</span>
               <input
                 type="password"
                 autoComplete="off"
+                autoCapitalize="off"
+                placeholder={dropbox ? t("pasteSyncKey") : undefined}
+                disabled={busy || !!resetPreview}
                 spellCheck={false}
                 value={code}
                 onChange={(e) => setCode(e.target.value)}
@@ -284,18 +334,14 @@ export function SyncSettings({
             <div className="dialog-actions settings-actions">
               <button
                 type="button"
-                disabled={busy || !code.trim()}
+                className={dropbox ? "primary" : undefined}
+                disabled={busy || !!resetPreview || !code.trim()}
                 onClick={() => void run(async () => {
                   if (!keyed) return client.current!.connect(code);
                   if (dropbox) {
                     const provider = DropboxProvider.configured(dropboxClientId());
-                    const credentials = await dropboxCredentials(code);
-                    const remote = await provider.readRemote(credentials);
-                    if (!remote) throw Error(t('dropboxRemoteMissing'));
-                    const result = await client.current!.connectProvider(credentials, remote) as Preview;
-                    if (await hash(result.payload) === result.localHash) return client.current!.resolve(result, 'remote');
-                    const local = await store.read();
-                    return local.state.folders.length || local.state.conversations.length ? { ...result, kind: 'conflict' as const } : result;
+                    client.current = new SyncClient(provider, store);
+                    return dropboxResult(await connectDropboxWorkspace(provider, store, code));
                   }
                   const provider = GoogleDriveProvider.configured(googleClientId());
                   const remote = await provider.readRemote();
@@ -303,7 +349,7 @@ export function SyncSettings({
                   return client.current!.connectProvider(await driveCredentials(code), remote);
                 })}
               >
-                {t("connectExisting")}
+                {t(dropbox ? "connectExistingWorkspace" : "connectExisting")}
               </button>
               <button
                 type="button"
@@ -311,6 +357,7 @@ export function SyncSettings({
                 onClick={() => {
                   setCode("");
                   setConnecting(false);
+                  setKeyIssue(null); setResetPreview(null);
                 }}
               >
                 {t("cancel")}
@@ -318,7 +365,41 @@ export function SyncSettings({
             </div>
           </>
         )}
-        {shown && connection && (
+        {dropbox && connecting && keyIssue && <section aria-label={t('lostSyncKey')}>
+          <h4>{t('lostSyncKey')}</h4>
+          <p className="hint">{t('lostSyncKeyHelp')}</p>
+          <button type="button" disabled={busy || !canReset || !!resetPreview} onClick={() => void run(async () => {
+            keyRequested.current = true;
+            setResetConfirmed(false);
+            setResetPreview(await prepareDropboxReset(DropboxProvider.configured(dropboxClientId()), store));
+          })}>{t('resetSyncUsingDevice')}</button>
+          {!canReset && <p className="hint">{t('resetSyncEmpty')}</p>}
+          {resetPreview && <section aria-label={t('confirmSyncReset')}>
+            <p className="safety-note"><UiIcon name="warning" />{t('resetSyncWarning')}</p>
+            <label><input type="checkbox" checked={resetConfirmed} disabled={busy}
+              onChange={e => setResetConfirmed(e.target.checked)} />{t('resetSyncConfirm')}</label>
+            <div className="dialog-actions settings-actions">
+              <button type="button" className="danger-button" disabled={busy || !resetConfirmed} onClick={() => void run(async () => {
+                const result = await resetDropboxWorkspace(DropboxProvider.configured(dropboxClientId()), store, resetPreview, resetConfirmed);
+                setResetPreview(null); setKeyIssue(null); setResetConfirmed(false);
+                return result;
+              })}>{t('replaceSyncData')}</button>
+              <button type="button" disabled={busy} onClick={() => { setResetPreview(null); setResetConfirmed(false); }}>{t('cancel')}</button>
+            </div>
+          </section>}
+        </section>}
+        {visibleDropboxKey && <section aria-label={t(savedKeyOnly ? 'savedSyncKeyControls' : 'syncKeyControls')}>
+          <h4>{t(savedKeyOnly ? 'savedSyncKey' : 'syncKey')}</h4>
+          <p className="hint">{t(savedKeyOnly ? 'savedSyncKeyHelp' : 'syncKeyWarning')}</p>
+          {savedKeyOnly && keyIssue === 'incorrect' && <p className="hint">{t('savedSyncKeyMismatch')}</p>}
+          <input type={shown ? 'text' : 'password'} aria-label={t(savedKeyOnly ? 'savedSyncKey' : 'syncKey')} autoComplete="off" readOnly spellCheck={false} value={visibleDropboxKey} />
+          <div className="dialog-actions settings-actions">
+            <button type="button" disabled={busy} aria-expanded={shown} onClick={() => setShown(!shown)}>{t(savedKeyOnly ? shown ? 'hideSavedSyncKey' : 'showSavedSyncKey' : shown ? 'hideSyncKey' : 'showSyncKey')}</button>
+            <button type="button" disabled={busy} onClick={() => void navigator.clipboard.writeText(visibleDropboxKey)
+              .then(() => setMessage(t('copied'))).catch(() => setMessage(t('copyFailed')))}>{t(savedKeyOnly ? 'copySavedSyncKey' : 'copySyncKey')}</button>
+          </div>
+        </section>}
+        {shown && connection && !dropbox && (
           <>
             <p className="safety-note"><UiIcon name="lock" />{t(keyed ? 'syncKeyWarning' : "syncCodeWarning")}</p>
             <input

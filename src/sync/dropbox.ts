@@ -118,9 +118,9 @@ export class DropboxProvider implements SyncProvider {
       throw new SyncError(409);
     return saved;
   }
-  async readRemote(c?: Credentials): Promise<Remote | null> {
+  async readRemote(c?: Credentials, reuse?: Remote): Promise<Remote | null> {
     const r = await this.locate(c);
-    return !r ? null : 'encryptedBlob' in r ? r : this.download(r);
+    return !r ? null : 'encryptedBlob' in r ? r : reuse?.remoteVersion === version(r) ? this.remember(reuse) : this.download(r);
   }
   async get(_c: Credentials, reuse?: Remote): Promise<Remote> {
     const m = await this.locate(_c);
@@ -161,6 +161,15 @@ export class DropboxProvider implements SyncProvider {
     if (!Array.isArray(pair) || pair.length !== 3 || pair[2] !== DROPBOX_PATH.toLowerCase() || typeof pair[1] !== 'string' || !/^[0-9a-f]{9,}$/.test(pair[1]))
       throw Error('Invalid Dropbox write precondition.');
     return this.upload(blob, revision + 1, { '.tag': 'update', update: pair[1] });
+  }
+  /** Explicit lost-key recovery only; never used by normal sync or migration. */
+  async resetRemote(expected: Remote, blob: Envelope) {
+    const pair = JSON.parse(expected.remoteVersion ?? 'null');
+    if (!Array.isArray(pair) || pair.length !== 3 || pair[2] !== DROPBOX_PATH.toLowerCase())
+      throw Error('Recover the Sync Key and migrate the old root sync file before resetting sync.');
+    const current = await this.head();
+    if (!current || version(current) !== expected.remoteVersion) throw new SyncError(409);
+    return this.upload(blob, expected.revision + 1, { '.tag': 'update', update: current.rev });
   }
   disconnect() { return this.auth.disconnect(); }
 }

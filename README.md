@@ -1,4 +1,4 @@
-# ChatGPT Chat Explorer
+# Chat Explorer for ChatGPT
 
 **v0.1-alpha** — a browser extension for organizing ChatGPT chats in an independent Explorer window. This is an early release, not a production-readiness claim. English UI; Chromium/Chrome/Edge and Firefox/Zen builds.
 
@@ -64,11 +64,13 @@ This is DOM-based collection, **not guaranteed full server history**. Unexposed 
 
 ## Dropbox sync
 
-Settings → Sync → Connect Dropbox. Save the **Sync Key** privately. On another browser/device, authorize the same Dropbox account, enter the same key, then review/apply the remote workspace. The key is not stored in Dropbox; losing it means losing access to the encrypted remote workspace. Local exports/backups are plaintext and must be handled separately.
+Settings → Sync → Connect Dropbox. An empty remote creates a new encrypted workspace and random **Sync Key**. Save the key privately using **Copy Sync Key**; it is masked until Show. If a remote workspace already exists, copy/paste its key from another connected device and review/apply it. No replacement key is generated for fresh-device onboarding. The key is not stored in Dropbox; uninstall/reinstall or a fresh browser profile may lose the local copy. Local exports/backups are plaintext and must be handled separately.
+
+If no device or saved copy has the key, it cannot be recovered. **Reset sync using this device…** is an explicitly confirmed, destructive replacement: it backs up the local workspace, creates a new key and conditionally replaces the encrypted remote with this device’s local metadata. Remote-only data is lost, and other devices need to disconnect/reconnect with the new key. Empty local workspaces cannot reset a remote; unmigrated legacy root files must first be recovered/migrated with their old key. Short device-pairing codes are not implemented.
 
 Sync is local-first: changes save immediately, startup checks once, five minutes of inactivity triggers a one-shot sync, and closing a dirty Explorer attempts a best-effort sync. There is no focus sync, polling or real-time service. Automatic Sync Off disables automatic attempts; Sync now remains available. Closing the browser/process cannot guarantee delivery.
 
-Remote pulls retain backup and stale-preview checks. Conflicting edits require an explicit choice; there is no automatic merge. Offline errors preserve local changes for a later attempt. Disconnect removes this device's credentials, not local organization or the Dropbox file.
+Remote pulls retain backup and stale-preview checks. Conflicting edits require an explicit choice; there is no automatic merge. Offline errors preserve local changes for a later attempt. Disconnect removes this device’s Dropbox OAuth credentials and remote baseline, preserving its local workspace and Sync Key. Same-profile reconnect reuses a matching key. Change account explicitly requests Dropbox reauthentication; an incompatible key never causes a remote overwrite.
 
 Older root `/chat-explorer-sync.json` files are migrated only when the dedicated file is absent, after key/schema validation. The legacy file is retained. Update all connected devices before migration to avoid old builds continuing to write to the old path. [Migration and conflict details](docs/SYNC.md).
 

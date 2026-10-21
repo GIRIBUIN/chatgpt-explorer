@@ -15,6 +15,6 @@ export async function driveCredentials(code: string): Promise<Credentials> {
       syncId: await hash({ driveKey: value.encryptionKey }), authToken: '', origin: DRIVE_ORIGIN };
   } catch { throw Error('Invalid Sync Key.'); }
 }
-export function driveKey(c: Credentials) {
+export function driveKey(c: Pick<Credentials, 'encryptionKey'>) {
   return encode(new TextEncoder().encode(JSON.stringify({ version: 1, encryptionKey: c.encryptionKey })));
 }

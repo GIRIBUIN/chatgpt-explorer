@@ -14,7 +14,7 @@ function fixture(target = 'chromium') {
   });
   const api = { identity: { getRedirectURL: vi.fn(() => redirect), launchWebAuthFlow: launch },
     storage: { local: { get: vi.fn(async () => structuredClone(data)), set: vi.fn(async (v: object) => { Object.assign(data, structuredClone(v)); }),
-      remove: vi.fn(async (keys: string[]) => { for (const k of keys) delete data[k]; }) } } };
+      remove: vi.fn(async (keys: string | string[]) => { for (const k of typeof keys === 'string' ? [keys] : keys) delete data[k]; }) } } };
   vi.stubGlobal('browser', target === 'chromium' ? undefined : api); vi.stubGlobal('chrome', api);
   const fetcher = vi.fn(async (_input: RequestInfo | URL, options?: RequestInit) => {
     const p = new URLSearchParams(String(options?.body));
@@ -101,10 +101,10 @@ it('unexpected or missing scopes are rejected', async () => {
   const f = fixture(); f.fetcher.mockResolvedValueOnce(Response.json({ access_token: 'a', refresh_token: 'r', expires_in: 1000, token_type: 'bearer', scope: 'account_info.read' }));
   await expect(f.auth.connect()).rejects.toThrow('Reconnect'); expect(f.data[DROPBOX_TOKEN_KEY]).toBeUndefined();
 });
-it('Disconnect removes tokens/draft before best-effort revoke', async () => {
+it('Disconnect removes OAuth tokens but preserves the local pending key before best-effort revoke', async () => {
   const f = fixture(); await f.auth.connect(); f.data[DROPBOX_PENDING_KEY] = 'key';
   f.fetcher.mockImplementationOnce(async () => { expect(f.data[DROPBOX_TOKEN_KEY]).toBeUndefined(); return new Response(''); });
-  await f.auth.disconnect(); expect(f.data[DROPBOX_TOKEN_KEY]).toBeUndefined(); expect(f.data[DROPBOX_PENDING_KEY]).toBeUndefined();
+  await f.auth.disconnect(); expect(f.data[DROPBOX_TOKEN_KEY]).toBeUndefined(); expect(f.data[DROPBOX_PENDING_KEY]).toBe('key');
   expect(String(f.fetcher.mock.calls.at(-1)![0])).toContain('/2/auth/token/revoke');
 });
 it('revoke/network failure cannot prevent local Disconnect', async () => {
@@ -146,4 +146,22 @@ it('Sync settings accurately disclose Full Dropbox permission and separate Sync 
   expect(t('dropboxDisclosure')).not.toContain('App Folder');
   expect(t('syncKeyWarning')).toContain('not stored in Dropbox');
   expect(t('syncKeyWarning')).toContain('lose it');
+});
+
+it.each(['chromium', 'firefox', 'zen'])('%s normal Connect keeps session reuse; Change account explicitly reauthenticates', async target => {
+  const f = fixture(target); await f.auth.connect();
+  expect(new URL(f.launch.mock.calls[0][0].url).searchParams.has('force_reauthentication')).toBe(false);
+  await f.auth.connect({ changeAccount: true });
+  const u = new URL(f.launch.mock.calls[1][0].url);
+  expect(u.searchParams.get('force_reauthentication')).toBe('true');
+  expect(u.searchParams.get('code_challenge_method')).toBe('S256');
+  expect(u.searchParams.get('token_access_type')).toBe('offline');
+});
+it('token account identity is stored locally without extra scopes and survives silent refresh', async () => {
+  const f = fixture(); f.fetcher.mockResolvedValueOnce(Response.json({ access_token: 'access', refresh_token: 'refresh',
+    expires_in: 14400, token_type: 'bearer', scope: DROPBOX_SCOPES.join(' '), account_id: 'dbid:synthetic-account' }));
+  await f.auth.connect();
+  expect(f.data.explorerDropboxAccount).toBe('dbid:synthetic-account');
+  await f.auth.invalidate('access'); await f.auth.token();
+  expect(f.data[DROPBOX_TOKEN_KEY]).toMatchObject({ accountId: 'dbid:synthetic-account' });
 });

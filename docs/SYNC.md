@@ -37,7 +37,24 @@ Connect/Reconnect is an explicit user action. Authorization uses code flow, PKCE
 
 Access token, refresh token and expiry are stored only in extension `storage.local`. A valid token is reused; expiry within 60 seconds triggers silent refresh. A rejected API token is invalidated and silently retried once. Background startup/idle/close never starts interactive consent. Revoked/invalid credentials require explicit Reconnect. Temporary network/429/5xx failures report temporary unavailability and preserve local changes. There is no aggressive retry loop.
 
-Disconnect removes local credentials/tokens and pending connection key before best-effort revoke. Revoke failure cannot block local disconnect. It does not delete remote data or local workspace. Save the key first if it will be needed again.
+Disconnect removes Dropbox OAuth tokens and remote connection baselines before best-effort revoke. It preserves the device-local Sync Key (including a pending first-connection key). Revoke failure cannot block local disconnect. It does not delete remote data or local workspace. Same-profile reconnect reuses the saved key; a fresh profile requests it. A key left in a legacy Dropbox connection is validated independently of its revision/cache; even invalid-connection cleanup preserves that remaining key before deleting the connection record. A valid interrupted-upload draft is also available for Show/Copy and automatic reconnection. Reads never generate a replacement key. Disconnect is not key deletion. Lost-key reset is a separate confirmed replacement, described below.
+
+Normal Connect/Reconnect may reuse the Dropbox web session. **Change account** (or **Connect another account** after disconnect) adds `force_reauthentication=true` to the same PKCE flow. The OAuth token response account ID is stored device-locally to detect account changes, but is not displayed raw in normal Settings and needs no additional scopes. Before accepting a different or unverified account token, the old sync baseline is removed under the sync network lock. A saved key that cannot decrypt the new account’s remote prompts for a correct key without changing that remote or the retained key. A replacement key is retained only after a validated preview is applied (or identical data is acknowledged).
+
+## New workspace, existing workspace and lost keys
+
+- No remote: create the first encrypted workspace with a random key (an interrupted creation may reuse its local draft). A key belonging to another local workspace is not used to initialize a fresh remote.
+- Existing remote + matching saved key: validate automatically and reuse the key. Normal same-profile reconnect does not ask again.
+- Existing remote + no/wrong key: show **Existing synced workspace found** and a **Paste Sync Key** input. Obtain the key from Sync settings on another connected device. No candidate key or remote write is generated just for onboarding. Decryption and schema validation precede any key replacement/connection; divergent metadata still uses the existing preview/conflict choices.
+- Key controls are masked by default, with explicit **Show Sync Key** and **Copy Sync Key** (Copy does not require Show). A retained key remains available under **Saved Sync Key on this device** even after disconnect or while a new connection asks for a key. A mismatched saved key is marked as belonging to a different workspace or older key; displaying/copying it does not make it valid for the current remote. Uninstall/reinstall or a new browser profile may remove local key storage. The key is never stored in Dropbox. No short pairing codes are implemented.
+
+### Explicit lost-key reset
+
+The old key cannot be recovered. When an encrypted canonical remote exists and this device has a nonempty valid local workspace but no usable key, **Reset sync using this device…** offers a read-only review. It warns about loss of remote-only data and the need for other devices to disconnect/reconnect with a new key. A separate checkbox and destructive confirmation are required; Cancel generates no key and makes no mutation.
+
+Confirmation rechecks the local payload hash, OAuth session/account and remote version. It completes the existing local workspace backup before generating a new key and issuing a rev-conditional update of the canonical file. No blind overwrite or new filename is used. Changed previews, failed backups and stale revisions abort. The authoritative upload response becomes the new baseline; the old confirmed key is replaced only after success. A local draft protects the new key if Dropbox accepts an upload but its response is lost; reconnect can validate that draft without another overwrite. Edits made during the upload remain local and dirty against the uploaded snapshot.
+
+Empty local workspaces cannot reset a remote. An unmigrated legacy root file cannot be reset by this path: atomically checking both an old root and a new canonical file is unavailable, so the existing key-validated migration must happen first. The old key, if later found, cannot decrypt the replacement. There is no automatic remote history/rollback provided by this reset.
 
 ## Sync Key and encryption
 
@@ -74,7 +91,7 @@ The old location was `/chat-explorer-sync.json`. **Update all connected installa
 
 ## Other devices and previous providers
 
-Connect the same Dropbox account, enter the existing Sync Key and review/apply with backup. Different nonempty local/remote workspaces use conflict choices; identical data connects without conflict.
+Connect the same Dropbox account, paste the existing Sync Key copied from another connected device and review/apply with backup. Different nonempty local/remote workspaces use conflict choices; identical data connects without conflict.
 
 [Google Drive](legacy/SYNC-GOOGLE-DRIVE.md) and [Cloudflare](legacy/SYNC-CLOUDFLARE.md) are retained internal/legacy providers with regression tests. Existing connections keep routing until explicitly disconnected. No legacy remote data is deleted or automatically copied between services. Disconnect locally, then connect Dropbox to initialize from current local metadata. Optional legacy env variables do not configure a new-user provider picker or an assumed-active central server.
 

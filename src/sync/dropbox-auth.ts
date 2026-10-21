@@ -5,7 +5,8 @@ export const DROPBOX_ORIGIN = 'https://api.dropboxapi.com';
 export const DROPBOX_SCOPES = ['files.metadata.read', 'files.content.read', 'files.content.write'];
 export const DROPBOX_TOKEN_KEY = 'explorerDropboxToken';
 export const DROPBOX_PENDING_KEY = 'explorerDropboxPendingKey';
-type Token = { clientId: string; accessToken: string; refreshToken: string; expiresAt: number };
+export const DROPBOX_ACCOUNT_KEY = 'explorerDropboxAccount';
+type Token = { clientId: string; accessToken: string; refreshToken: string; expiresAt: number; accountId?: string };
 export class DropboxReconnectError extends Error {
   readonly syncRecovery = 'reconnect';
   constructor() { super('Reconnect Dropbox to continue syncing.'); }
@@ -82,6 +83,7 @@ export class DropboxAuth {
           (!previous && !scopes) || scopes && (DROPBOX_SCOPES.some(s => !scopes.includes(s)) || scopes.some(s => !DROPBOX_SCOPES.includes(s))))
         throw new DropboxReconnectError();
       return { clientId: this.clientId, accessToken: data.access_token, refreshToken: refresh,
+        ...(validText(data.account_id) ? { accountId: data.account_id } : previous?.accountId ? { accountId: previous.accountId } : {}),
         expiresAt: Date.now() + Number(data.expires_in) * 1000 };
     } catch (error) {
       if (error instanceof DropboxReconnectError || error instanceof DropboxUnavailableError) throw error;
@@ -90,7 +92,7 @@ export class DropboxAuth {
     finally { clearTimeout(timer); }
   }
   /** Only an explicit Connect/Reconnect action calls this interactive method. */
-  async connect() {
+  async connect(options: { changeAccount?: boolean; beforeSave?: (accountId?: string) => Promise<void> } = {}) {
     if (!this.clientId) throw Error('Dropbox app key is not configured in this build.');
     const api = webext(), redirect = api.identity.getRedirectURL('dropbox');
     const { verifier, challenge } = await dropboxPkce(), state = encode(crypto.getRandomValues(new Uint8Array(32)));
@@ -98,6 +100,7 @@ export class DropboxAuth {
     url.search = new URLSearchParams({ client_id: this.clientId, redirect_uri: redirect, response_type: 'code',
       code_challenge: challenge, code_challenge_method: 'S256', token_access_type: 'offline',
       scope: DROPBOX_SCOPES.join(' '), state }).toString();
+    if (options.changeAccount) url.searchParams.set('force_reauthentication', 'true');
     let callback: string | undefined;
     try { callback = await api.identity.launchWebAuthFlow({ url: url.href, interactive: true }); }
     catch { throw Error('Dropbox authorization was cancelled or denied.'); }
@@ -105,7 +108,10 @@ export class DropboxAuth {
     const code = dropboxCode(callback, redirect, state);
     await this.lock(async () => {
       const token = await this.exchange({ grant_type: 'authorization_code', code, code_verifier: verifier, redirect_uri: redirect });
+      await options.beforeSave?.(token.accountId);
       await api.storage.local.set({ [DROPBOX_TOKEN_KEY]: token });
+      if (token.accountId) await api.storage.local.set({ [DROPBOX_ACCOUNT_KEY]: token.accountId });
+      else await api.storage.local.remove(DROPBOX_ACCOUNT_KEY);
     });
   }
   private async lock<T>(work: () => Promise<T>): Promise<T> {
@@ -139,7 +145,7 @@ export class DropboxAuth {
     await this.lock(async () => {
       const t = (await webext().storage.local.get(DROPBOX_TOKEN_KEY))[DROPBOX_TOKEN_KEY] as Token | undefined;
       // Local disconnect must succeed even offline. Never refresh just to revoke.
-      await webext().storage.local.remove([DROPBOX_TOKEN_KEY, DROPBOX_PENDING_KEY]);
+      await webext().storage.local.remove(DROPBOX_TOKEN_KEY);
       if (!validText(t?.accessToken)) return;
       const controller = new AbortController(), timer = setTimeout(() => controller.abort(), 5000);
       try {

@@ -105,6 +105,9 @@ export async function encrypt(
     ciphertext: encode(new Uint8Array(ciphertext)),
   };
 }
+export class SyncDecryptionError extends Error {
+  constructor() { super('Could not decrypt sync data. No local changes applied.'); }
+}
 export async function decrypt(c: Credentials, raw: unknown): Promise<unknown> {
   try {
     const e = object(raw);
@@ -125,6 +128,6 @@ export async function decrypt(c: Credentials, raw: unknown): Promise<unknown> {
     if (plain.byteLength > MAX_PLAINTEXT) throw Error();
     return JSON.parse(new TextDecoder().decode(plain));
   } catch {
-    throw Error("Could not decrypt sync data. No local changes applied.");
+    throw new SyncDecryptionError();
   }
 }
