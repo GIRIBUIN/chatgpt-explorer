@@ -22,6 +22,6 @@ Lost-key reset is a separate destructive action, never automatic: after explicit
 
 ## Other transfers and exports
 
-The default build has no central Chat Explorer sync server, analytics, telemetry or data-sale/collection endpoint. Dropbox receives the requests required for OAuth and sync. Opening chats loads ChatGPT normally. Legacy providers are retained for explicit old configurations; their historical documentation is separate.
+The default build has no central Chat Explorer sync server, analytics, telemetry or data-sale/collection endpoint. Dropbox receives the requests required for OAuth and sync. Opening chats loads ChatGPT normally. Legacy provider code is retained for explicit old configurations.
 
 Workspace exports, conflict exports and exported local backups contain **plaintext metadata**. Theme exports contain appearance settings. They do not include conversation content or sync credentials. Users choose where to store/share those files. Local browser profiles are not a protected secret vault: anyone controlling the profile/device may access credentials, plaintext metadata and keys.

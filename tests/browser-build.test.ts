@@ -2,6 +2,21 @@ import { expect, it, vi } from "vitest";
 import { manifestFor } from "../scripts/manifest";
 import { webext } from "../src/utils/browser";
 import { watchWindowBounds } from "../src/explorer/window-bounds";
+import { readFileSync } from "node:fs";
+
+it.each(["chromium", "firefox"] as const)("uses supplied PNG icons in the %s manifest", (target) => {
+  const manifest = manifestFor(target);
+  for (const [size, path] of Object.entries(manifest.icons)) {
+    const png = readFileSync(new URL(`../assets/${path}`, import.meta.url));
+    expect(Array.from(png.slice(0, 8))).toEqual([137, 80, 78, 71, 13, 10, 26, 10]);
+    const header = new DataView(png.buffer, png.byteOffset, png.byteLength);
+    expect(header.getUint32(16)).toBe(Number(size));
+    expect(header.getUint32(20)).toBe(Number(size));
+  }
+  for (const [size, path] of Object.entries(manifest.action.default_icon)) {
+    expect(manifest.icons[size as keyof typeof manifest.icons]).toBe(path);
+  }
+});
 
 it("generates a Chromium MV3 service worker manifest", () => {
   const m = manifestFor("chromium");

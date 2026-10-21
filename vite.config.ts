@@ -1,6 +1,7 @@
 import { originUrl } from "./src/sync/types";
 import { defineConfig, loadEnv } from "vite";
 import { manifestFor } from "./scripts/manifest";
+import { readFileSync } from "node:fs";
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, ".", "VITE_");
   const syncOrigin = env.VITE_SYNC_ORIGIN
@@ -16,7 +17,20 @@ export default defineConfig(({ mode }) => {
     plugins: [
       {
         name: "browser-manifest",
+        transformIndexHtml() {
+          return [{ tag: "link", attrs: { rel: "icon", type: "image/png", href: "./icons/icon-32.png" }, injectTo: "head" }];
+        },
         generateBundle() {
+          for (const size of [16, 32, 48, 128]) {
+            this.emitFile({
+              type: "asset",
+              fileName: `icons/icon-${size}.png`,
+              source: readFileSync(new URL(`./assets/icons/icon-${size}.png`, import.meta.url)),
+            });
+          }
+          for (const fileName of ["LICENSE", "THIRD_PARTY_NOTICES.md"]) {
+            this.emitFile({ type: "asset", fileName, source: readFileSync(new URL(`./${fileName}`, import.meta.url), "utf8") });
+          }
           this.emitFile({
             type: "asset",
             fileName: "manifest.json",

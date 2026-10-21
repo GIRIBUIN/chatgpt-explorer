@@ -1,7 +1,33 @@
-> LEGACY — retained for Cloudflare regression tests only. The default Dropbox build does not use this server. The example D1 ID must be replaced before explicit deployment; no production endpoint is assumed active.
+# Legacy Cloudflare sync server
 
-# Sync Worker
+Retained for compatibility and regression tests. The default Dropbox extension does **not** use this server, and no production endpoint is assumed active. Current sync instructions: [Dropbox](../docs/SYNC.md).
 
-Cloudflare Worker + D1 encrypted snapshot API. See [legacy setup and security](../docs/legacy/SYNC-CLOUDFLARE.md) for configuration, migrations, local development and deployment commands.
+The Worker stores sync ID, hashed bearer token, revision, encrypted blob and timestamp in D1. Keys never go to the server. Conditional SQL updates reject stale revisions. Do not log credentials or request bodies.
 
-`npm run typecheck` checks the Worker source. `npm test` uses root Vitest and Node 24 SQLite with the production migration/SQL; it is not a real D1 runtime test. Run root `npm install` first, then install this directory's Wrangler dependency to use `npm run dev` / `npm run deploy`.
+## Local development
+
+Install root dependencies first. From this directory:
+
+```sh
+npm ci
+npm run typecheck
+npm test
+npx wrangler d1 migrations apply chat-explorer-sync --local
+npm run dev
+```
+
+Tests use the Worker handler and a Node 24 SQLite adapter, not a deployed D1 instance. To build a legacy client, set `VITE_SYNC_PROVIDER=cloudflare` and `VITE_SYNC_ORIGIN=http://127.0.0.1:8787` in root `.env.local`. Only loopback development origins allow HTTP; remote origins require HTTPS.
+
+## Optional deployment
+
+Only if intentionally maintaining a legacy server:
+
+```sh
+npx wrangler login
+npx wrangler d1 create chat-explorer-sync
+# Replace the example database_id in wrangler.jsonc with the returned UUID.
+npx wrangler d1 migrations apply chat-explorer-sync --remote
+npm run deploy
+```
+
+Keep the `DB`, migration-directory and `RATE_LIMITER` bindings. Configure the deployed HTTPS origin in the legacy client build. Review Cloudflare limits and authentication before deployment; none of these commands is needed for Dropbox sync.
