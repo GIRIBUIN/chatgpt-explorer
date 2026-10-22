@@ -138,7 +138,9 @@ async function performScan(session: Session) {
           }),
         );
         if (!opened[0]?.result?.ok) {
-          failureReason = opened[0]?.result?.reason ?? "sidebar-closed";
+          failureReason = !health.hasSidebar && opened[0]?.result?.reason === "sidebar-closed"
+            ? "sidebar-not-found"
+            : opened[0]?.result?.reason ?? "sidebar-closed";
           throw Error(failureReason);
         }
         health = await call(ensureImportContent(tabId, url));

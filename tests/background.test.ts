@@ -79,6 +79,37 @@ function mockChrome() {
 }
 beforeEach(() => vi.resetModules());
 describe("MV3 lifecycle", () => {
+  it("opens ChatGPT recovery in a normal tab and coalesces repeated clicks", async () => {
+    const c = mockChrome();
+    const { openChatGPT } = await import("../src/background");
+    const first = openChatGPT();
+    expect(openChatGPT()).toBe(first);
+    await first;
+    expect(c.tabs.create).toHaveBeenCalledExactlyOnceWith({ windowId: 1, url: "https://chatgpt.com/", active: true });
+    expect(c.scripting.executeScript).not.toHaveBeenCalled();
+  });
+  it("reuses and focuses an existing ChatGPT tab without navigation or import", async () => {
+    const c = mockChrome();
+    c.windows.getAll.mockResolvedValue([
+      { id: 9, type: "popup", tabs: [{ id: 90, windowId: 9, url: "https://chatgpt.com/", lastAccessed: 100 }] },
+      { id: 3, type: "normal", state: "minimized", tabs: [{ id: 30, windowId: 3, url: "https://chatgpt.com/c/mine", lastAccessed: 10 }] },
+    ]);
+    const { openChatGPT } = await import("../src/background");
+    await openChatGPT();
+    expect(c.tabs.update).toHaveBeenCalledExactlyOnceWith(30, { active: true });
+    expect(c.windows.update).toHaveBeenCalledWith(3, { focused: true, state: "normal" });
+    expect(c.tabs.create).not.toHaveBeenCalled();
+    expect(c.windows.create).not.toHaveBeenCalled();
+    expect(c.scripting.executeScript).not.toHaveBeenCalled();
+  });
+  it("creates a normal window for recovery when only the Explorer popup exists", async () => {
+    const c = mockChrome();
+    c.windows.getLastFocused.mockResolvedValue({ id: 9, type: "popup" });
+    const { openChatGPT } = await import("../src/background");
+    await openChatGPT();
+    expect(c.windows.create).toHaveBeenCalledExactlyOnceWith({ url: "https://chatgpt.com/", type: "normal", focused: true });
+    expect(c.tabs.create).not.toHaveBeenCalled();
+  });
   it("keeps real ChatGPT tabs available for Current Chat and tab reuse", async () => {
     const c = mockChrome();
     const owned = {

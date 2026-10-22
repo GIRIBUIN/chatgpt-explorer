@@ -140,11 +140,12 @@ try {
       .count(),
     0,
   );
-  await page.getByRole("button", { name: "Import Chats", exact: true }).click();
+  await page.locator(".commandbar").getByRole("button", { name: "Import Chats", exact: true }).click();
   await page
-    .getByRole("status")
-    .filter({ hasText: "No ChatGPT page found." })
+    .getByRole("dialog")
+    .getByText(/ChatGPT is not open/)
     .waitFor();
+  await page.getByRole("dialog").getByRole("button", { name: "Cancel", exact: true }).click();
   await page.getByRole("button", { name: "New Folder", exact: true }).click();
   await page.getByLabel("Display name", { exact: true }).fill("Mine");
   await save();

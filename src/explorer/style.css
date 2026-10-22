@@ -424,7 +424,8 @@ dialog h2 {
   margin: 0;
 }
 dialog form,
-.data-settings {
+.data-settings,
+.import-recovery {
   padding: 18px 20px;
 }
 dialog label,
@@ -901,3 +902,7 @@ h3 > .ui-icon {
 
 .tree-name-editing { display: flex; align-items: center; gap: 6px; }
 .tree-name-editing .inline-rename { flex: 1; min-width: 0; width: 100%; }
+.onboarding { padding: 48px 20px; }
+.onboarding h2 { color: var(--text); margin-bottom: 8px; }
+.onboarding .dialog-actions { justify-content: center; flex-wrap: wrap; }
+.import-recovery .dialog-actions { flex-wrap: wrap; }

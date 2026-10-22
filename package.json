@@ -16,6 +16,7 @@
     "test:browser:dropbox": "node scripts/verify-dropbox-browser.mjs",
     "test:browser:explorer": "node scripts/verify-explorer-browser.mjs",
     "test:browser:import": "node scripts/verify-import-browser.mjs",
+    "test:browser:first-use": "node scripts/verify-first-use-browser.mjs",
     "test:browser:preferences": "node scripts/verify-ui-preferences-browser.mjs",
     "test:browser:drag": "node scripts/verify-drag-browser.mjs",
     "test:browser:marquee": "node scripts/verify-marquee-browser.mjs",

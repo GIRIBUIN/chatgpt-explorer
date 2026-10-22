@@ -28,7 +28,8 @@ import { themeVariables } from "../models/theme";
 import type { ImportCandidate } from "../models/import";
 import { webext } from "../utils/browser";
 import type { OpenBehavior } from "../models/types";
-import { importFeedback } from "./import-feedback";
+import { importFeedback, importFailureMessage } from "./import-feedback";
+import { EmptyWorkspace } from "../components/EmptyWorkspace";
 import { ItemDetails } from "../components/ItemDetails";
 import { t } from "../i18n";
 import type { ChatCandidate } from "../utils/discovery";
@@ -98,6 +99,8 @@ export function App() {
   const [importSession, setImportSession] = useState<string | null>(null);
   const [stopping, setStopping] = useState(false);
   const [scanProgress, setScanProgress] = useState({ count: 0, projects: 0 });
+  const [importRecovery, setImportRecovery] = useState<{ message: string; open: boolean } | null>(null);
+  const [openingChatGPT, setOpeningChatGPT] = useState(false);
   const sessionRef = useRef<string | null>(null);
   const current = useRef(state),
     queue = useRef(Promise.resolve()),
@@ -340,6 +343,7 @@ export function App() {
     if (discoveryLock.current || discovering) return;
     discoveryLock.current = true;
     setDiscovering(true);
+    setImportRecovery(null);
     if (importMode === "page") {
       sessionRef.current = crypto.randomUUID();
       setImportSession(sessionRef.current);
@@ -372,15 +376,24 @@ export function App() {
                 projectNames: {},
               };
         if (scan.pageCount === 0 && !scan.stopped) {
-          setNotice(t("noChatGPTPage"));
+          setImportRecovery({ message: t("chatGPTNotOpen"), open: true });
           return;
         }
         let message = "";
         const ok = await commit((s) => {
           const result = importChats(s, scan.candidates, scan.projectNames);
-          message = importFeedback(result);
+          message = scan.failedPages && !scan.candidates.length && !result.metadataUpdated
+            ? ""
+            : importFeedback(result, scan.failedPages);
           return result.state;
         });
+        if (ok && !scan.stopped && (scan.failedPages || scan.limitedPages)) {
+          setImportRecovery({
+            message: [message, scan.failedPages ? importFailureMessage(scan.failureReason) : "", scan.limitedPages ? t("scanLimited") : ""].filter(Boolean).join(" "),
+            open: !["sidebar-closed", "sidebar-open-timeout"].includes(scan.failureReason ?? ""),
+          });
+          return;
+        }
         if (ok)
           setNotice(
             [
@@ -392,28 +405,7 @@ export function App() {
                   )
                 : "",
               scan.failedPages
-                ? t(
-                    [
-                      "sidebar-not-found",
-                      "sidebar-closed",
-                      "sidebar-open-timeout",
-                    ].includes(scan.failureReason ?? "")
-                      ? "sidebarNotFound"
-                      : [
-                            "content-script-unavailable",
-                            "injection-failed",
-                          ].includes(scan.failureReason ?? "")
-                        ? "contentUnavailable"
-                        : ["message-failed", "ping-timeout"].includes(
-                              scan.failureReason ?? "",
-                            )
-                          ? "importMessageFailed"
-                          : ["unsupported-page", "tab-navigated"].includes(
-                                scan.failureReason ?? "",
-                              )
-                            ? "importUnsupported"
-                            : "pagesSkipped",
-                  )
+                ? importFailureMessage(scan.failureReason)
                 : "",
               scan.limitedPages ? t("scanLimited") : "",
             ]
@@ -427,13 +419,25 @@ export function App() {
         else setCandidates(found);
       }
     } catch {
-      setNotice(t("browserFailed"));
+      if (importMode === "page") setImportRecovery({ message: t("importRetryFailed"), open: true });
+      else setNotice(t("browserFailed"));
     } finally {
       sessionRef.current = null;
       setImportSession(null);
       setStopping(false);
       discoveryLock.current = false;
       setDiscovering(false);
+    }
+  }
+  async function openChatGPT() {
+    if (openingChatGPT) return;
+    setOpeningChatGPT(true);
+    try {
+      await request("open-chatgpt");
+    } catch {
+      setImportRecovery({ message: t("browserFailed") + " " + t("importRetryFailed"), open: true });
+    } finally {
+      setOpeningChatGPT(false);
     }
   }
   async function stopScan() {
@@ -495,7 +499,7 @@ export function App() {
       endDrag();
       return;
     }
-    if (editor || candidates || palette) return;
+    if (editor || candidates || palette || importRecovery) return;
     if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === "p") {
       e.preventDefault();
       setPalette(true);
@@ -862,7 +866,7 @@ export function App() {
   useEffect(() => {
     // A freshly opened Explorer can have body focus, outside React's app wrapper.
     const selectVisible = (e: globalThis.KeyboardEvent) => {
-      if (!ready || editor || candidates || palette || e.defaultPrevented ||
+      if (!ready || editor || candidates || palette || importRecovery || e.defaultPrevented ||
         !(e.ctrlKey || e.metaKey) || e.altKey || e.shiftKey || e.key.toLowerCase() !== 'a' ||
         !(e.target instanceof Element) || isTextInput(e.target, false)) return;
       e.preventDefault();
@@ -873,7 +877,7 @@ export function App() {
     };
     document.addEventListener('keydown', selectVisible);
     return () => document.removeEventListener('keydown', selectVisible);
-  }, [ready, editor, candidates, palette, visibleItems]);
+  }, [ready, editor, candidates, palette, importRecovery, visibleItems]);
   if (!ready) return <div className="loading">{t("loading")}</div>;
   return (
     <div className="app" onKeyDown={key}>
@@ -928,7 +932,7 @@ export function App() {
         </button>
       </div>
       <div className="commandbar">
-        <button onClick={() => setEditor({ kind: "new", parentId: folderId })}>
+        <button onClick={() => setEditor({ kind: "new", parentId: query ? null : folderId })}>
           <UiIcon name="newFolder" />{t("newFolder")}
         </button>
         <button disabled={discovering} onClick={() => void discover()}>
@@ -1101,7 +1105,9 @@ export function App() {
               ))}
             </select>
           </div>
-          <div
+          {!query && !state.folders.length && !state.conversations.length ? (
+            <EmptyWorkspace disabled={discovering || readOnly} onImport={() => void discover("page")} onAddCurrent={() => void discover()} />
+          ) : <div
             className="file-list"
             role="grid"
             aria-multiselectable="true"
@@ -1140,9 +1146,21 @@ export function App() {
               folders.length + chats.length === 0 && (
                 <div className="empty">{t("noItems")}</div>
               )}
-          </div>
+          </div>}
         </main>
       </div>
+      {importRecovery && (
+        <Dialog title={t("importChats")} onClose={() => setImportRecovery(null)}>
+          <div className="import-recovery">
+            <p>{importRecovery.message}</p>
+            <div className="dialog-actions">
+              {importRecovery.open && <button disabled={openingChatGPT} onClick={() => void openChatGPT()}>{t("openChatGPT")}</button>}
+              <button disabled={openingChatGPT || discovering} onClick={() => void discover("page")}>{t("retry")}</button>
+              <button onClick={() => setImportRecovery(null)}>{t("cancel")}</button>
+            </div>
+          </div>
+        </Dialog>
+      )}
       {menu && (
         <>
           <div className="menu-dismiss" onClick={() => setMenu(null)} />
@@ -1279,7 +1297,7 @@ export function App() {
             {
               label: t("newFolder"),
               enabled: !readOnly,
-              run: () => setEditor({ kind: "new", parentId: folderId }),
+              run: () => setEditor({ kind: "new", parentId: query ? null : folderId }),
             },
             {
               label: t("rename"),
@@ -1355,6 +1373,10 @@ export function App() {
           close={() => setEditor(null)}
           notice={setNotice}
           go={go}
+          createdFolder={(id, parentId) => {
+            go(parentId ? `folder:${parentId}` : "home");
+            setSelected({ kind: "folder", id });
+          }}
         />
       )}
     </div>
@@ -1372,6 +1394,7 @@ function EditorDialog({
   close,
   notice,
   go,
+  createdFolder,
 }: {
   autoPreview: Preview | null;
   clearAutoPreview: () => void;
@@ -1385,6 +1408,7 @@ function EditorDialog({
   close: () => void;
   notice: (s: string) => void;
   go: (l: Location) => void;
+  createdFolder: (id: string, parentId: string | null) => void;
 }) {
   const [syncBusy, setSyncBusy] = useState(false);
   const item = "item" in editor ? editor.item : null;
@@ -1441,6 +1465,7 @@ function EditorDialog({
       if (Object.values(colorNames).some((value) => !value.trim()))
         throw Error(t("enterAName"));
       let duplicate: Conversation | undefined;
+      let createdId: string | undefined;
       const ok = await commit((s) => {
         if (editor.kind === "add") {
           const result = addConversation(s, name, url, folderId);
@@ -1453,12 +1478,13 @@ function EditorDialog({
             !s.folders.some((f) => f.id === editor.parentId)
           )
             throw Error(t("parentFolderNotFound"));
+          createdId = crypto.randomUUID();
           return {
             ...s,
             folders: [
               ...s.folders,
               {
-                id: crypto.randomUUID(),
+                id: createdId,
                 name: name.trim(),
                 parentId: editor.parentId,
                 createdAt: Date.now(),
@@ -1468,7 +1494,7 @@ function EditorDialog({
             settings: {
               ...s.settings,
               collapsed: s.settings.collapsed.filter(
-                (id) => id !== editor.parentId,
+                (id) => !ancestors(s.folders, editor.parentId).some(f => f.id === id),
               ),
             },
           };
@@ -1527,6 +1553,7 @@ function EditorDialog({
         return s;
       });
       if (ok) {
+        if (createdId && editor.kind === "new") createdFolder(createdId, editor.parentId);
         if (duplicate) {
           notice(t("alreadyAdded"));
           go(duplicate.folderId ? `folder:${duplicate.folderId}` : "inbox");

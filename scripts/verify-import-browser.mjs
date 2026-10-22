@@ -59,7 +59,7 @@ try {
   });
   const progressEvents = () => explorer.evaluate(() => window.progressEvents);
   const start = () =>
-    explorer.getByRole("button", { name: "Import Chats", exact: true }).click();
+    explorer.locator(".commandbar").getByRole("button", { name: "Import Chats", exact: true }).click();
   const read = () =>
     worker.evaluate(
       async () =>

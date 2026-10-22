@@ -173,6 +173,31 @@ async function currentChat() {
     await webext().windows.getAll({ populate: true, windowTypes: ["normal"] }),
   );
 }
+let openingChatGPT: Promise<void> | null = null;
+// User-triggered recovery only. Focus an existing normal tab without navigating it.
+export function openChatGPT() {
+  if (!openingChatGPT) openingChatGPT = (async () => {
+    const windows = await webext().windows.getAll({ populate: true });
+    const target = windows.filter(w => w.type === "normal")
+      .flatMap(w => w.tabs ?? [])
+      .filter(tab => tab.id !== undefined && /^https:\/\/chatgpt\.com\//.test(tab.url ?? ""))
+      .sort((a, b) => (b.lastAccessed ?? 0) - (a.lastAccessed ?? 0) || Number(!!b.active) - Number(!!a.active) || a.id! - b.id!)[0];
+    if (target?.id !== undefined) {
+      await webext().tabs.update(target.id, { active: true });
+      const win = windows.find(w => w.id === target.windowId);
+      await webext().windows.update(target.windowId, { focused: true, ...(win?.state === "minimized" ? { state: "normal" as const } : {}) });
+      return;
+    }
+    const win = await normalWindow().catch(() => undefined);
+    if (win?.id !== undefined) {
+      await webext().tabs.create({ windowId: win.id, url: "https://chatgpt.com/", active: true });
+      await webext().windows.update(win.id, { focused: true, ...(win.state === "minimized" ? { state: "normal" as const } : {}) });
+    } else {
+      await webext().windows.create({ url: "https://chatgpt.com/", type: "normal", focused: true });
+    }
+  })().finally(() => { openingChatGPT = null; });
+  return openingChatGPT;
+}
 export async function openChat(url: string, explicitMode?: OpenBehavior) {
   const parsed = parseConversationUrl(url);
   if (!parsed) throw Error(t("unsupportedConversationURL"));
@@ -288,6 +313,8 @@ webext().runtime.onMessage.addListener((message: unknown, sender, reply) => {
   const task =
     m.type === "current-chat" || m.type === "import-open-tabs"
       ? currentChat()
+      : m.type === "open-chatgpt"
+        ? openChatGPT()
       : m.type === "import-chats"
         ? scanChats(m.sessionId)
         : m.type === "open-chat" && typeof m.url === "string"

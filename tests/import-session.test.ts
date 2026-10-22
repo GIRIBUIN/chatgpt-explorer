@@ -93,6 +93,33 @@ it.each(["chrome", "browser"])(
     });
   },
 );
+it("returns a missing-tab state without injection or opening tabs", async () => {
+  const { api } = setup();
+  api.windows.getAll.mockResolvedValue([]);
+  const { scanChats } = await import("../src/background/import");
+  const result = await scanChats("missing");
+  expect(result).toMatchObject({ pageCount: 0, failureReason: "no-chatgpt-tab", candidates: [] });
+  expect(api.tabs.create).not.toHaveBeenCalled();
+  expect(api.scripting.executeScript).not.toHaveBeenCalled();
+});
+it("allows a fresh retry after an unready sidebar without losing a missing-sidebar reason", async () => {
+  const { api } = setup();
+  api.tabs.sendMessage.mockResolvedValueOnce({
+    ok: false, hasSidebar: false, url: "https://chatgpt.com/c/user", visibleConversationCount: 0, reason: "sidebar-not-found",
+  });
+  const original = api.scripting.executeScript.getMockImplementation()!;
+  api.scripting.executeScript.mockImplementation(request => request.func.name === "sidebarPage"
+    ? Promise.resolve([{ result: { ok: false, reason: "sidebar-closed" } }])
+    : original(request));
+  const { scanChats } = await import("../src/background/import");
+  const failed = await scanChats("unready");
+  expect(failed).toMatchObject({ pageCount: 1, failureReason: "sidebar-not-found", failedPages: 1, candidates: [] });
+  const retry = await scanChats("retry");
+  expect(retry.candidates.length).toBeGreaterThan(0);
+  expect(retry.sessionId).toBe("retry");
+  expect(retry.failedPages).toBe(0);
+  expect(api.tabs.create).not.toHaveBeenCalled();
+});
 it("attempts restore after content failure without open-tab fallback", async () => {
   const { api } = setup();
   api.scripting.executeScript.mockRejectedValue(Error("script failed"));
